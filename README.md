@@ -6,7 +6,7 @@
 
 主要是为了解决我们在服务器上下载GitHub等一些国外资源速度慢的问题。
 
-<br>
+
 
 # 使用须知
 
@@ -21,7 +21,7 @@
 
 > **注意**：当你在使用此项目时，遇到任何无法独自解决的问题请优先前往 [Issues](https://github.com/wanhebin/clash-for-linux/issues) 寻找解决方法。由于空闲时间有限，后续将不再对Issues中 “已经解答”、“已有解决方案” 的问题进行重复性的回答。
 
-<br>
+
 
 # 使用教程
 
@@ -42,7 +42,9 @@ $ vim .env
 
 > **注意：** `.env` 文件中的变量 `CLASH_SECRET` 为自定义 Clash Secret，值为空时，脚本将自动生成随机字符串。
 
-<br>
+`CLASH_URL`可以在 [魔戒](https://mojie.app/register?aff=eeO3mwBS) 里面获取
+
+
 
 ## 启动程序
 
@@ -113,7 +115,7 @@ https_proxy=http://127.0.0.1:7890
 
 以上步鄹如果正常，说明服务clash程序启动成功，现在就可以体验高速下载github资源了。
 
-<br>
+
 
 ## 重启程序
 
@@ -122,7 +124,7 @@ https_proxy=http://127.0.0.1:7890
 > **注意：**
 > 重启脚本 `restart.sh` 不会更新订阅信息。
 
-<br>
+
 
 ## 停止程序
 
@@ -148,7 +150,34 @@ $ proxy_off
 然后检查程序端口、进程以及环境变量`http_proxy|https_proxy`，若都没则说明服务正常关闭。
 
 
-<br>
+
+## huggingface下载
+
+使用代理下载模型可能会比较耗流量，这个时候可以尝试huggingface镜像
+
+```shell
+sudo apt-get update
+sudo apt-get install aria2
+wget https://hf-mirror.com/hfd/hfd.sh
+chmod a+x hfd.sh
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+- 然后就可以**下载模型**
+
+```bash
+./hfd.sh gpt2
+```
+
+- **下载数据集**
+
+```bash
+./hfd.sh wikitext --dataset
+```
+
+
+
+
 
 ## Clash Dashboard
 
@@ -167,7 +196,7 @@ $ proxy_off
 此 Clash Dashboard 使用的是[yacd](https://github.com/haishanh/yacd)项目，详细使用方法请移步到yacd上查询。
 
 
-<br>
+
 
 # 常见问题
 
