@@ -79,6 +79,15 @@ Secret：xxxxxxxxxxxxx
 
 ```
 
+如果出现linux的格式问题，执行
+
+```shell
+sudo apt-get update && sudo apt-get install -y dos2unix
+find /root/clash-for-linux -type f -exec dos2unix {} +
+```
+
+
+
 ```bash
 $ source /etc/profile.d/clash.sh
 $ proxy_on
