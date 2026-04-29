@@ -4872,8 +4872,11 @@ doctor_tun_checks() {
   process_cap_rc=2
   case "$backend" in
     systemd|systemd-user)
-      tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1
-      process_cap_rc=$?
+      if tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1; then
+        process_cap_rc=0
+      else
+        process_cap_rc=$?
+      fi
       ;;
   esac
 
@@ -5342,8 +5345,11 @@ tun_doctor_primary_reason() {
   process_cap_rc=2
   case "$backend" in
     systemd|systemd-user)
-      tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1
-      process_cap_rc=$?
+      if tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1; then
+        process_cap_rc=0
+      else
+        process_cap_rc=$?
+      fi
       ;;
   esac
 

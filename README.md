@@ -82,7 +82,6 @@ bash install.sh
   clashctl log/logs  📜 查看日志
 
 💡 显示更多帮助命令：clashctl -h
-💡 更多高级能力：clashctl help advanced
 ```
 
 ------
