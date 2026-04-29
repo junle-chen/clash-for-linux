@@ -12,7 +12,9 @@ source "$PROJECT_DIR/scripts/init/systemd-user.sh"
 source "$PROJECT_DIR/scripts/init/script.sh"
 
 init_project_context "$PROJECT_DIR"
+guard_unsafe_sudo_auto_install "${1:-}"
 load_env_if_exists
+migrate_env_legacy_compat_fields "$PROJECT_DIR/.env"
 detect_install_scope "${1:-auto}"
 ensure_project_not_wsl_windows_mount
 
