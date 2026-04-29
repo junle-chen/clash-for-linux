@@ -21,29 +21,25 @@ for arg in "$@"; do
   esac
 done
 
-# shellcheck source=scripts/core/common.sh
 source "$PROJECT_DIR/scripts/core/common.sh"
-# shellcheck source=scripts/core/runtime.sh
 source "$PROJECT_DIR/scripts/core/runtime.sh"
-# shellcheck source=scripts/core/config.sh
 source "$PROJECT_DIR/scripts/core/config.sh"
-# shellcheck source=scripts/init/systemd.sh
+source "$PROJECT_DIR/scripts/core/proxy.sh"
 source "$PROJECT_DIR/scripts/init/systemd.sh"
-# shellcheck source=scripts/init/systemd-user.sh
 source "$PROJECT_DIR/scripts/init/systemd-user.sh"
-# shellcheck source=scripts/init/script.sh
 source "$PROJECT_DIR/scripts/init/script.sh"
 
 init_project_context "$PROJECT_DIR"
 load_env_if_exists
 detect_install_scope auto
 
+system_proxy_disable || true
+clear_shell_proxy_persist_state || true
 service_stop || true
 remove_runtime_entry || true
 remove_clashctl_entry || true
 remove_clashctl_completion || true
 remove_shell_alias_entry || true
-clear_shell_proxy_persist_state || true
 
 if [ "$PURGE_RUNTIME" = "true" ]; then
   rm -rf "$RUNTIME_DIR"
