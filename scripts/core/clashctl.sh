@@ -200,7 +200,7 @@ cmd_on() {
 
   prepare
 
-  # fast path：已经完全开启时，直接返回
+  # fast path 1：代理已经完整开启
   if status_is_running 2>/dev/null \
     && proxy_controller_reachable 2>/dev/null \
     && [ "$(system_proxy_status 2>/dev/null || echo off)" = "on" ] \
@@ -210,13 +210,16 @@ cmd_on() {
     return 0
   fi
 
-  ensure_on_path_ready
-
-  if [ "$already_on" = "true" ]; then
+  # fast path 2：runtime 已运行，只是系统代理被关了
+  if status_is_running 2>/dev/null \
+    && proxy_controller_reachable 2>/dev/null; then
+    system_proxy_enable || true
     print_on_feedback
     trap - ERR
     return 0
   fi
+
+  ensure_on_path_ready
 
   if status_is_running 2>/dev/null && ! proxy_controller_reachable 2>/dev/null; then
     ui_warn "检测到内核已运行但控制器不可访问，正在重启以加载当前配置"
@@ -294,7 +297,6 @@ cmd_off() {
   local system_proxy_rc
 
   prepare
-  service_stop
 
   if system_proxy_disable; then
     :
