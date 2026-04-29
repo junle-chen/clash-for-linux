@@ -195,18 +195,27 @@ cmd_on() {
   local relay_switch
   local relay_switch_file relay_err_file relay_rc
   local system_proxy_rc system_proxy_degraded="false"
-  local already_on="false"
 
   trap 'rc=$?; ui_error "开启代理失败：cmd_on 在第 ${LINENO} 行执行失败：${BASH_COMMAND}（返回码：${rc}）"; ui_next "clashctl logs service"; exit "$rc"' ERR
 
   prepare
-  ensure_on_path_ready
 
+  # fast path：已经完全开启时，直接返回
   if status_is_running 2>/dev/null \
     && proxy_controller_reachable 2>/dev/null \
     && [ "$(system_proxy_status 2>/dev/null || echo off)" = "on" ] \
     && system_proxy_matches_runtime 2>/dev/null; then
-    already_on="true"
+    print_on_feedback
+    trap - ERR
+    return 0
+  fi
+
+  ensure_on_path_ready
+
+  if [ "$already_on" = "true" ]; then
+    print_on_feedback
+    trap - ERR
+    return 0
   fi
 
   if status_is_running 2>/dev/null && ! proxy_controller_reachable 2>/dev/null; then
