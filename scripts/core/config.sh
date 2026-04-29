@@ -576,6 +576,78 @@ download_candidate_fetch() {
     "$url"
 }
 
+subscription_fake_progress_bar() {
+  local pid="$1"
+  local width=72
+  local percent=3
+  local filled bar
+
+  while kill -0 "$pid" 2>/dev/null; do
+    percent=$((percent + 5))
+    [ "$percent" -gt 94 ] && percent=94
+
+    filled=$((percent * width / 100))
+    bar="$(printf '%*s' "$filled" '' | tr ' ' '#')"
+
+    printf '\r%-72s %3d.0%%' "$bar" "$percent"
+    sleep 0.2
+  done
+}
+
+subscription_fake_progress_done() {
+  printf '\r######################################################################## 100.0%%\n'
+}
+
+download_subscription_fetch_quiet() {
+  local url="$1"
+  local out="$2"
+  local ua="${__CLASH_DOWNLOAD_UA:-}"
+
+  curl_download \
+    --silent \
+    --show-error \
+    --fail \
+    --location \
+    --connect-timeout "$(download_connect_timeout)" \
+    --max-time "$(download_max_time)" \
+    --retry 1 \
+    ${ua:+-A "$ua"} \
+    --output "$out" \
+    "$url"
+}
+
+download_subscription_file() {
+  local url="$1"
+  local out="$2"
+  local fetch_tmp pid rc
+
+  mkdir -p "$(dirname "$out")"
+  rm -f "$out" 2>/dev/null || true
+
+  fetch_tmp="$(mktemp)"
+  rm -f "$fetch_tmp" 2>/dev/null || true
+
+  ui_download "正在下载：subscription"
+
+  download_subscription_fetch_quiet "$url" "$fetch_tmp" &
+  pid="$!"
+
+  subscription_fake_progress_bar "$pid"
+
+  wait "$pid"
+  rc="$?"
+
+  if [ "$rc" -eq 0 ]; then
+    subscription_fake_progress_done
+    mv -f "$fetch_tmp" "$out"
+    return 0
+  fi
+
+  printf '\n'
+  rm -f "$fetch_tmp" 2>/dev/null || true
+  return "$rc"
+}
+
 download_subscription_yaml() {
   local url="$1"
   local out_file="$2"
@@ -596,10 +668,9 @@ download_subscription_yaml() {
       require_subscription_fetch_allowed "$fetch_reason" "$url"
 
       __CLASH_DOWNLOAD_UA="$(subconverter_subscription_user_agent)" \
-      download_file \
+      download_subscription_file \
         "$url" \
-        "$out_file" \
-        "subscription"
+        "$out_file"
 
       subscription_cache_store "$url" "$fmt" "$out_file" "$url"
       ;;
