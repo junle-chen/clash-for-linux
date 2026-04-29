@@ -29,52 +29,42 @@ Usage:
   use                            💱 切换订阅
   select                         💫 切换节点
 
+🧩 Config:
+  config                         🧩 配置编译管理
+  config kernel mihomo|clash     🧩 切换指定内核
+  mixin                          🧩 Mixin 配置管理
+  relay                          🔗 多跳节点管理
+  
 
 📦 Subscription:
-  ls                             📡 查看订阅列表
+  config show                    📡 查看当前订阅
+  config regen                   🔄 更新当前订阅
+  ls                             📜 查看订阅列表
+  sub                            📡 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
 
 🕹️  Control:
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
-  clashsecret                    🔑 查看或设置 Web 密钥
 
-🩺 Diagnose:
-  doctor                         🩺 诊断环境与运行状态
-  status                         🔍️ 查看状态总览
-  boot                           🚦 管理开机代理接管
-  log/logs                       📜 查看日志
-  completion                     💡 导出 Bash / Zsh 补全脚本
-
-💡 更多高级能力：clashctl help advanced
-EOF
-}
-
-usage_advanced() {
-  cat <<EOF
-🐱 Clash 高级命令
-
-🧩 Config:
-  config                         🧩 配置编译管理
-  mixin                          🧩 Mixin 配置管理
-  relay                          🔗 多跳节点管理
-
-📡 Subscription Advanced:
-  sub                            📡 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
-  health                         🩷  多订阅健康审计
-
-🩺 Runtime & Diagnose:
+🧪 Transparent proxy:
   tun                            🧪 Tun 模式管理
-  tun doctor                         🩺 诊断环境与运行状态
-  tun log/logs                       📜 查看日志
+  tun doctor                     🩺 诊断环境与运行状态
+  tun log/logs                   📜 查看日志
 
 🚀 Lifecycle:
-  boot on|off|status                 🚦 管理开机代理接管
-  boot runtime on|off|status         🚦 仅管理内核开机自启
-  boot proxy on|off|status           📜 仅管理开机代理保持
+  boot on|off|status             🚦 管理开机代理接管
+  boot runtime on|off|status     🚦 仅管理内核开机自启
+  boot proxy on|off|status       📜 仅管理开机代理保持
   upgrade                        🚀 升级当前或指定内核
   update                         🔄 更新项目代码
   completion bash|zsh            💡 导出 Shell 补全脚本
   dev reset                      🧪 恢复到安装前状态（保留项目目录和已下载文件）
+
+🩺 Diagnose:
+  doctor                         🩺 诊断环境与运行状态
+  status                         🔍️ 查看状态总览
+  log/logs                       📜 查看日志
+  completion                     💡 导出 Bash / Zsh 补全脚本
 
 📌 Advanced Examples:
   clashctl sub list
@@ -83,29 +73,14 @@ usage_advanced() {
   clashctl sub rename hk hk-bak
   clashctl sub remove hk
 
-  clashctl config show
-  clashctl config explain
-  clashctl config regen
-  clashctl config kernel mihomo
   clashctl relay add 多跳-示例 节点A 节点B --domain example.com
   clashctl relay list
-
-  clashctl tun doctor
-  clashctl update --force
-  clashctl dev reset
-
-🚀 Main Path Reminder:
-  clashctl add [订阅链接] [名称]
-  clashctl add local
-  clashctl use
-  clashon
-  clashctl select
-  clashctl status
 
 💡 Notes:
   当前编译链固定为 active-only
   只处理当前 active 主订阅
   Tun 模式属于高级能力，开启前建议先执行：clashctl tun doctor
+
 EOF
 }
 
@@ -2972,7 +2947,7 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashctl add" "➕ 添加订阅"
   printf '  %-18s %s\n' "clashctl add local" "➕ 从 runtime/subscriptions 导入本地订阅"
   printf '  %-18s %s\n' "clashctl use" "💱 切换订阅"
-  printf '  %-18s %s\n' "clashctl ls" "📡 查看订阅列表"
+  printf '  %-18s %s\n' "clashctl ls" "📜 查看订阅列表"
   echo "📌 高级"
   printf '  %-18s %s\n' "clashctl tun" "🧪 Tun 模式管理"
   printf '  %-18s %s\n' "clashctl mixin" "🧩 Mixin 配置管理"
@@ -4897,8 +4872,11 @@ doctor_tun_checks() {
   process_cap_rc=2
   case "$backend" in
     systemd|systemd-user)
-      tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1
-      process_cap_rc=$?
+      if tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1; then
+        process_cap_rc=0
+      else
+        process_cap_rc=$?
+      fi
       ;;
   esac
 
@@ -5135,7 +5113,11 @@ tun_runtime_pid() {
 
 tun_process_capability_text() {
   local backend="${1:-unknown}"
-  local pid cap_eff cap_value net_admin net_raw
+  local pid=""
+  local cap_eff=""
+  local cap_value=0
+  local net_admin="no"
+  local net_raw="no"
 
   pid="$(tun_runtime_pid "$backend" 2>/dev/null || true)"
   if [ -z "${pid:-}" ] || [ ! -r "/proc/$pid/status" ]; then
@@ -5143,19 +5125,30 @@ tun_process_capability_text() {
     return 0
   fi
 
-  cap_eff="$(sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null | head -n 1)"
+  cap_eff="$(
+    sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null \
+      | head -n 1
+  )"
+
   if [ -z "${cap_eff:-}" ]; then
     echo "pid=$pid，未读取到 CapEff"
     return 0
   fi
 
+  case "$cap_eff" in
+    *[!0-9a-fA-F]*)
+      echo "pid=$pid，CapEff 格式异常：$cap_eff"
+      return 0
+      ;;
+  esac
+
   cap_value=$((16#$cap_eff))
-  net_admin="no"
-  net_raw="no"
-  if [ $((cap_value & (1 << 12))) -ne 0 ]; then
+
+  if (( cap_value & (1 << 12) )); then
     net_admin="yes"
   fi
-  if [ $((cap_value & (1 << 13))) -ne 0 ]; then
+
+  if (( cap_value & (1 << 13) )); then
     net_raw="yes"
   fi
 
@@ -5164,16 +5157,29 @@ tun_process_capability_text() {
 
 tun_process_has_cap_net_admin() {
   local backend="${1:-unknown}"
-  local pid cap_eff cap_value
+  local pid=""
+  local cap_eff=""
+  local cap_value=0
 
   pid="$(tun_runtime_pid "$backend" 2>/dev/null || true)"
   [ -n "${pid:-}" ] && [ -r "/proc/$pid/status" ] || return 2
 
-  cap_eff="$(sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null | head -n 1)"
+  cap_eff="$(
+    sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null \
+      | head -n 1
+  )"
+
   [ -n "${cap_eff:-}" ] || return 2
 
+  case "$cap_eff" in
+    *[!0-9a-fA-F]*)
+      return 2
+      ;;
+  esac
+
   cap_value=$((16#$cap_eff))
-  if [ $((cap_value & (1 << 12))) -ne 0 ]; then
+
+  if (( cap_value & (1 << 12) )); then
     return 0
   fi
 
@@ -5339,8 +5345,11 @@ tun_doctor_primary_reason() {
   process_cap_rc=2
   case "$backend" in
     systemd|systemd-user)
-      tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1
-      process_cap_rc=$?
+      if tun_process_has_cap_net_admin "$backend" >/dev/null 2>&1; then
+        process_cap_rc=0
+      else
+        process_cap_rc=$?
+      fi
       ;;
   esac
 
@@ -6000,9 +6009,20 @@ cmd_add() {
 
   sub_fmt="$(detect_subscription_format "$sub_url")"
 
+  ui_progress_line 5 "正在保存订阅..."
+
   set_subscription "$sub_url" "$sub_fmt" "$sub_name" "false"
+
+  ui_progress_line 65 "正在设为当前订阅..."
+
   set_active_subscription "$sub_name"
-  apply_runtime_change_after_config_mutation
+
+  ui_progress_line 85 "正在应用配置..."
+
+  apply_runtime_change_after_config_mutation >/dev/null
+
+  ui_progress_done "订阅添加完成"
+
   print_add_feedback "$sub_name" "$sub_url"
   cmd_ls
 }

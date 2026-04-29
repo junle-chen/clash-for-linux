@@ -119,6 +119,33 @@ ui_kv() {
   printf '%s %s：%s\n' "$icon" "$key" "$value"
 }
 
+ui_progress_line() {
+  local percent="$1"
+  local message="$2"
+
+  if [ -t 2 ]; then
+    printf '\r\033[K⏳ [%3s%%] %s' "$percent" "$message" >&2
+  else
+    printf '⏳ [%3s%%] %s\n' "$percent" "$message" >&2
+  fi
+}
+
+ui_progress_done() {
+  local message="${1:-完成}"
+
+  if [ -t 2 ]; then
+    printf '\r\033[K✅ [100%%] %s\n' "$message" >&2
+  else
+    printf '✅ [100%%] %s\n' "$message" >&2
+  fi
+}
+
+ui_progress_clear() {
+  if [ -t 2 ]; then
+    printf '\r\033[K' >&2
+  fi
+}
+
 install_phase_begin() {
   local icon="$1"
   local text="$2"
