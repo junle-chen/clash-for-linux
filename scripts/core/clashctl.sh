@@ -29,52 +29,42 @@ Usage:
   use                            💱 切换订阅
   select                         💫 切换节点
 
+🧩 Config:
+  config                         🧩 配置编译管理
+  config kernel mihomo|clash     🧩 切换指定内核
+  mixin                          🧩 Mixin 配置管理
+  relay                          🔗 多跳节点管理
+  
 
 📦 Subscription:
-  ls                             📡 查看订阅列表
+  config show                    📡 查看当前订阅
+  config regen                   🔄 更新当前订阅
+  ls                             📜 查看订阅列表
+  sub                            📡 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
 
 🕹️  Control:
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
-  clashsecret                    🔑 查看或设置 Web 密钥
 
-🩺 Diagnose:
-  doctor                         🩺 诊断环境与运行状态
-  status                         🔍️ 查看状态总览
-  boot                           🚦 管理开机代理接管
-  log/logs                       📜 查看日志
-  completion                     💡 导出 Bash / Zsh 补全脚本
-
-💡 更多高级能力：clashctl help advanced
-EOF
-}
-
-usage_advanced() {
-  cat <<EOF
-🐱 Clash 高级命令
-
-🧩 Config:
-  config                         🧩 配置编译管理
-  mixin                          🧩 Mixin 配置管理
-  relay                          🔗 多跳节点管理
-
-📡 Subscription Advanced:
-  sub                            📡 订阅高级管理（启用 / 禁用 / 重命名 / 删除）
-  health                         🩷  多订阅健康审计
-
-🩺 Runtime & Diagnose:
+🧪 Transparent proxy:
   tun                            🧪 Tun 模式管理
-  tun doctor                         🩺 诊断环境与运行状态
-  tun log/logs                       📜 查看日志
+  tun doctor                     🩺 诊断环境与运行状态
+  tun log/logs                   📜 查看日志
 
 🚀 Lifecycle:
-  boot on|off|status                 🚦 管理开机代理接管
-  boot runtime on|off|status         🚦 仅管理内核开机自启
-  boot proxy on|off|status           📜 仅管理开机代理保持
+  boot on|off|status             🚦 管理开机代理接管
+  boot runtime on|off|status     🚦 仅管理内核开机自启
+  boot proxy on|off|status       📜 仅管理开机代理保持
   upgrade                        🚀 升级当前或指定内核
   update                         🔄 更新项目代码
   completion bash|zsh            💡 导出 Shell 补全脚本
   dev reset                      🧪 恢复到安装前状态（保留项目目录和已下载文件）
+
+🩺 Diagnose:
+  doctor                         🩺 诊断环境与运行状态
+  status                         🔍️ 查看状态总览
+  log/logs                       📜 查看日志
+  completion                     💡 导出 Bash / Zsh 补全脚本
 
 📌 Advanced Examples:
   clashctl sub list
@@ -83,29 +73,14 @@ usage_advanced() {
   clashctl sub rename hk hk-bak
   clashctl sub remove hk
 
-  clashctl config show
-  clashctl config explain
-  clashctl config regen
-  clashctl config kernel mihomo
   clashctl relay add 多跳-示例 节点A 节点B --domain example.com
   clashctl relay list
-
-  clashctl tun doctor
-  clashctl update --force
-  clashctl dev reset
-
-🚀 Main Path Reminder:
-  clashctl add [订阅链接] [名称]
-  clashctl add local
-  clashctl use
-  clashon
-  clashctl select
-  clashctl status
 
 💡 Notes:
   当前编译链固定为 active-only
   只处理当前 active 主订阅
   Tun 模式属于高级能力，开启前建议先执行：clashctl tun doctor
+
 EOF
 }
 
@@ -2972,7 +2947,7 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashctl add" "➕ 添加订阅"
   printf '  %-18s %s\n' "clashctl add local" "➕ 从 runtime/subscriptions 导入本地订阅"
   printf '  %-18s %s\n' "clashctl use" "💱 切换订阅"
-  printf '  %-18s %s\n' "clashctl ls" "📡 查看订阅列表"
+  printf '  %-18s %s\n' "clashctl ls" "📜 查看订阅列表"
   echo "📌 高级"
   printf '  %-18s %s\n' "clashctl tun" "🧪 Tun 模式管理"
   printf '  %-18s %s\n' "clashctl mixin" "🧩 Mixin 配置管理"

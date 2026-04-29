@@ -65,7 +65,7 @@ bash install.sh
   clashctl add         ➕ 添加订阅
   clashctl add local   ➕ 从 runtime/subscriptions 导入本地订阅
   clashctl use         💱 切换订阅
-  clashctl ls          📡 查看订阅列表
+  clashctl ls          📜 查看订阅列表
 🔐 密钥管理
   clashctl secret      🔑 查看密钥
   clashctl secret 123  🔐 设置密钥
