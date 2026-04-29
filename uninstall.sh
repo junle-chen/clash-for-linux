@@ -29,6 +29,12 @@ source "$PROJECT_DIR/scripts/init/systemd.sh"
 source "$PROJECT_DIR/scripts/init/systemd-user.sh"
 source "$PROJECT_DIR/scripts/init/script.sh"
 
+print_current_shell_proxy_cleanup_hint() {
+  echo
+  echo "如果当前终端仍然存在代理变量，请执行："
+  echo "unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY"
+}
+
 init_project_context "$PROJECT_DIR"
 load_env_if_exists
 detect_install_scope auto
@@ -44,6 +50,7 @@ remove_shell_alias_entry || true
 if [ "$PURGE_RUNTIME" = "true" ]; then
   rm -rf "$RUNTIME_DIR"
   clear_controller_secret || true
+  print_current_shell_proxy_cleanup_hint
   echo "🗑️ 已删除运行目录：$RUNTIME_DIR"
   echo "🧩 保留内容：项目目录仍在（已清理 controller secret）"
 elif [ "$DEV_RESET" = "true" ]; then
@@ -77,10 +84,12 @@ elif [ "$DEV_RESET" = "true" ]; then
 
   rm -rf "$cache_backup_dir" 2>/dev/null || true
   clear_controller_secret || true
+  print_current_shell_proxy_cleanup_hint
 
   echo "🧪 已清理安装状态：$RUNTIME_DIR"
   echo "🧩 保留内容：subscriptions.yaml、下载缓存与项目目录仍在（已清理 controller secret）"
 else
+  print_current_shell_proxy_cleanup_hint
   echo "📦 已卸载安装入口，保留运行目录：$RUNTIME_DIR"
   echo "🧩 保留内容：runtime 数据仍在"
 fi
