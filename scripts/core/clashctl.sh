@@ -195,19 +195,31 @@ cmd_on() {
   local relay_switch
   local relay_switch_file relay_err_file relay_rc
   local system_proxy_rc system_proxy_degraded="false"
-  local already_on="false"
 
   trap 'rc=$?; ui_error "开启代理失败：cmd_on 在第 ${LINENO} 行执行失败：${BASH_COMMAND}（返回码：${rc}）"; ui_next "clashctl logs service"; exit "$rc"' ERR
 
   prepare
-  ensure_on_path_ready
 
+  # fast path 1：代理已经完整开启
   if status_is_running 2>/dev/null \
     && proxy_controller_reachable 2>/dev/null \
     && [ "$(system_proxy_status 2>/dev/null || echo off)" = "on" ] \
     && system_proxy_matches_runtime 2>/dev/null; then
-    already_on="true"
+    print_on_feedback
+    trap - ERR
+    return 0
   fi
+
+  # fast path 2：runtime 已运行，只是系统代理被关了
+  if status_is_running 2>/dev/null \
+    && proxy_controller_reachable 2>/dev/null; then
+    system_proxy_enable || true
+    print_on_feedback
+    trap - ERR
+    return 0
+  fi
+
+  ensure_on_path_ready
 
   if status_is_running 2>/dev/null && ! proxy_controller_reachable 2>/dev/null; then
     ui_warn "检测到内核已运行但控制器不可访问，正在重启以加载当前配置"
@@ -285,7 +297,6 @@ cmd_off() {
   local system_proxy_rc
 
   prepare
-  service_stop
 
   if system_proxy_disable; then
     :

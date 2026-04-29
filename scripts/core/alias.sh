@@ -258,7 +258,6 @@ _clash_alias_auto_restore_proxy() {
   _clash_alias_persist_enabled || return 0
   _clash_alias_export_proxy || return 0
 
-  echo "♻️ 已恢复当前 shell 代理环境（来自持久化状态）"
   return 0
 }
 
