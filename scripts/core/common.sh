@@ -288,9 +288,6 @@ ensure_project_not_wsl_windows_mount() {
 }
 
 load_env_if_exists() {
-  local env_file
-  env_file="$PROJECT_DIR/.env"
-
   if [ -f "$PROJECT_DIR/.env" ]; then
     set -a
     # shellcheck disable=SC1090
@@ -299,7 +296,6 @@ load_env_if_exists() {
   fi
 
   normalize_env_compat
-  cleanup_env_legacy_compat_fields "$env_file"
 }
 
 normalize_env_compat() {
@@ -346,11 +342,14 @@ normalize_env_compat() {
   return 0
 }
 
-cleanup_env_legacy_compat_fields() {
+migrate_env_legacy_compat_fields() {
   local file="$1"
+  local tmp
 
   [ -n "${file:-}" ] || return 0
   [ -f "$file" ] || return 0
+
+  tmp="$(mktemp "${file}.tmp.XXXXXX")" || return 0
 
   awk '
     $0 ~ /^[[:space:]]*(export[[:space:]]+)?BUILD_MIN_SUCCESS_SOURCES=/ { next }
@@ -360,7 +359,23 @@ cleanup_env_legacy_compat_fields() {
       next
     }
     { print }
-  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  ' "$file" > "$tmp" || {
+    rm -f "$tmp" 2>/dev/null || true
+    return 0
+  }
+
+  if cmp -s "$file" "$tmp"; then
+    rm -f "$tmp" 2>/dev/null || true
+    return 0
+  fi
+
+  if [ ! -w "$file" ]; then
+    rm -f "$tmp" 2>/dev/null || true
+    warn ".env 当前用户不可写，已跳过兼容迁移：$file"
+    return 0
+  fi
+
+  mv -f "$tmp" "$file"
 }
 
 github_proxy_prefix() {
@@ -1113,6 +1128,17 @@ ensure_openwrt_install_supported() {
   if ! openwrt_project_dir_is_persistent; then
     die_state "OpenWrt 上当前项目目录位于易失路径：$PROJECT_DIR" \
               "请将项目放到持久化目录（例如 /root/clash-for-linux 或 /opt/clash-for-linux）后重新执行 bash install.sh"
+  fi
+}
+
+guard_unsafe_sudo_auto_install() {
+  local requested="${1:-}"
+
+  if [ "$(id -u)" -eq 0 ] \
+    && [ -n "${SUDO_USER:-}" ] \
+    && { [ -z "${requested:-}" ] || [ "$requested" = "auto" ]; }; then
+    die_state "检测到未受支持的安装方式：sudo bash install.sh" \
+              "普通安装请执行：bash install.sh；系统级安装请显式执行：sudo bash install.sh system"
   fi
 }
 
