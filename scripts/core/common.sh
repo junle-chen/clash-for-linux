@@ -233,6 +233,33 @@ init_project_context() {
   RESOURCE_DIR="$PROJECT_DIR/resources"
 }
 
+is_wsl_env() {
+  grep -qiE 'microsoft|wsl' /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+path_is_wsl_windows_mount() {
+  local path="$1"
+
+  path="$(readlink -f "$path" 2>/dev/null || printf '%s' "$path")"
+
+  case "$path" in
+    /mnt/[a-zA-Z]|/mnt/[a-zA-Z]/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_project_not_wsl_windows_mount() {
+  if is_wsl_env && path_is_wsl_windows_mount "$PROJECT_DIR"; then
+    die_state \
+      "当前项目目录位于 WSL Windows 挂载盘：$PROJECT_DIR" \
+      "请将项目移动到 Linux 原生目录后重新安装，例如：cd ~ && git clone <repo> clash-for-linux && cd clash-for-linux && bash install.sh"
+  fi
+}
+
 load_env_if_exists() {
   local env_file
   env_file="$PROJECT_DIR/.env"

@@ -48,6 +48,7 @@ bash install.sh
 
 - 上述命令使用了[加速前缀](https://gh-proxy.org/)，如失效可更换其他[可用链接](https://ghproxy.link/)。
 - 可通过 `.env` 文件或脚本参数自定义安装选项。
+- 在 WSL 环境中，不支持放在 Windows 挂载目录**/mnt/c/**下，请安装到 Linux 原生目录。
 
 ------
 

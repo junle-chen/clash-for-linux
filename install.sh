@@ -14,6 +14,7 @@ source "$PROJECT_DIR/scripts/init/script.sh"
 init_project_context "$PROJECT_DIR"
 load_env_if_exists
 detect_install_scope "${1:-auto}"
+ensure_project_not_wsl_windows_mount
 
 ensure_openwrt_install_supported
 ensure_required_commands
