@@ -5110,7 +5110,11 @@ tun_runtime_pid() {
 
 tun_process_capability_text() {
   local backend="${1:-unknown}"
-  local pid cap_eff cap_value net_admin net_raw
+  local pid=""
+  local cap_eff=""
+  local cap_value=0
+  local net_admin="no"
+  local net_raw="no"
 
   pid="$(tun_runtime_pid "$backend" 2>/dev/null || true)"
   if [ -z "${pid:-}" ] || [ ! -r "/proc/$pid/status" ]; then
@@ -5118,19 +5122,30 @@ tun_process_capability_text() {
     return 0
   fi
 
-  cap_eff="$(sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null | head -n 1)"
+  cap_eff="$(
+    sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null \
+      | head -n 1
+  )"
+
   if [ -z "${cap_eff:-}" ]; then
     echo "pid=$pid，未读取到 CapEff"
     return 0
   fi
 
+  case "$cap_eff" in
+    *[!0-9a-fA-F]*)
+      echo "pid=$pid，CapEff 格式异常：$cap_eff"
+      return 0
+      ;;
+  esac
+
   cap_value=$((16#$cap_eff))
-  net_admin="no"
-  net_raw="no"
-  if [ $((cap_value & (1 << 12))) -ne 0 ]; then
+
+  if (( cap_value & (1 << 12) )); then
     net_admin="yes"
   fi
-  if [ $((cap_value & (1 << 13))) -ne 0 ]; then
+
+  if (( cap_value & (1 << 13) )); then
     net_raw="yes"
   fi
 
@@ -5139,16 +5154,29 @@ tun_process_capability_text() {
 
 tun_process_has_cap_net_admin() {
   local backend="${1:-unknown}"
-  local pid cap_eff cap_value
+  local pid=""
+  local cap_eff=""
+  local cap_value=0
 
   pid="$(tun_runtime_pid "$backend" 2>/dev/null || true)"
   [ -n "${pid:-}" ] && [ -r "/proc/$pid/status" ] || return 2
 
-  cap_eff="$(sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null | head -n 1)"
+  cap_eff="$(
+    sed -nE 's/^CapEff:[[:space:]]*([0-9a-fA-F]+)$/\1/p' "/proc/$pid/status" 2>/dev/null \
+      | head -n 1
+  )"
+
   [ -n "${cap_eff:-}" ] || return 2
 
+  case "$cap_eff" in
+    *[!0-9a-fA-F]*)
+      return 2
+      ;;
+  esac
+
   cap_value=$((16#$cap_eff))
-  if [ $((cap_value & (1 << 12))) -ne 0 ]; then
+
+  if (( cap_value & (1 << 12) )); then
     return 0
   fi
 
@@ -5975,9 +6003,20 @@ cmd_add() {
 
   sub_fmt="$(detect_subscription_format "$sub_url")"
 
+  ui_progress_line 5 "正在保存订阅..."
+
   set_subscription "$sub_url" "$sub_fmt" "$sub_name" "false"
+
+  ui_progress_line 65 "正在设为当前订阅..."
+
   set_active_subscription "$sub_name"
-  apply_runtime_change_after_config_mutation
+
+  ui_progress_line 85 "正在应用配置..."
+
+  apply_runtime_change_after_config_mutation >/dev/null
+
+  ui_progress_done "订阅添加完成"
+
   print_add_feedback "$sub_name" "$sub_url"
   cmd_ls
 }
