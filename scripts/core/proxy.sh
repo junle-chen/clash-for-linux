@@ -266,7 +266,13 @@ proxy_group_exists() {
 
   [ -n "${group:-}" ] || return 1
 
-  [ "$(proxy_groups_json | "$(yq_bin)" -p=json eval ".proxies | has(\"$group\")" - 2>/dev/null)" = "true" ]
+  [ "$(
+    GROUP="$group" proxy_groups_json \
+      | GROUP="$group" "$(yq_bin)" -p=json eval \
+          '.proxies | to_entries | .[] | select(.key == env(GROUP)) | "true"' \
+          - 2>/dev/null \
+      | head -n 1
+  )" = "true" ]
 }
 
 proxy_group_type() {
@@ -275,7 +281,10 @@ proxy_group_type() {
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   proxy_group_exists "$group" || die "策略组不存在：$group"
 
-  proxy_groups_json | "$(yq_bin)" -p=json eval ".proxies.\"$group\".type // \"\"" - 2>/dev/null
+  GROUP="$group" proxy_groups_json \
+    | GROUP="$group" "$(yq_bin)" -p=json eval \
+        '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.type // ""' \
+        - 2>/dev/null
 }
 
 proxy_group_type_key() {
@@ -378,8 +387,10 @@ proxy_group_current() {
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   proxy_group_exists "$group" || die "策略组不存在：$group"
 
-  proxy_groups_json \
-    | "$(yq_bin)" -p=json eval ".proxies.\"$group\".now // \"\"" - 2>/dev/null
+  GROUP="$group" proxy_groups_json \
+    | GROUP="$group" "$(yq_bin)" -p=json eval \
+        '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.now // ""' \
+        - 2>/dev/null
 }
 
 proxy_group_nodes() {
@@ -388,8 +399,10 @@ proxy_group_nodes() {
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   proxy_group_exists "$group" || die "策略组不存在：$group"
 
-  proxy_groups_json \
-    | "$(yq_bin)" -p=json eval ".proxies.\"$group\".all[] // \"\"" - 2>/dev/null
+  GROUP="$group" proxy_groups_json \
+    | GROUP="$group" "$(yq_bin)" -p=json eval \
+        '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.all[] // ""' \
+        - 2>/dev/null
 }
 
 proxy_node_is_descriptive_entry() {
@@ -479,8 +492,10 @@ proxy_group_supports_manual_pick() {
   [ "$type_key" = "selector" ] || return 1
 
   has_now="$(
-    proxy_groups_json \
-      | "$(yq_bin)" -p=json eval ".proxies.\"$group\".now != null" - 2>/dev/null \
+    GROUP="$group" proxy_groups_json \
+      | GROUP="$group" "$(yq_bin)" -p=json eval \
+          '.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.now != null' \
+          - 2>/dev/null \
       | head -n 1
   )"
   [ "${has_now:-false}" = "true" ] || return 1
@@ -742,6 +757,37 @@ print_proxy_groups_summary() {
   done < <(proxy_group_list)
 }
 
+proxy_node_test_delay() {
+  local node="$1"
+  local url="${2:-http://www.gstatic.com/generate_204}"
+  local timeout_ms="${3:-3000}"
+  local encoded_node
+
+  [ -n "${node:-}" ] || return 1
+  encoded_node="$(proxy_node_url_encode "$node")"
+
+  controller_curl GET "/proxies/${encoded_node}/delay?timeout=${timeout_ms}&url=${url}" 2>/dev/null \
+    | "$(yq_bin)" -p=json eval '.delay // 0' - 2>/dev/null \
+    | head -n 1
+}
+
+proxy_group_nodes_delay_map() {
+  local group="$1"
+
+  [ -n "${group:-}" ] || return 1
+
+  GROUP="$group" proxy_groups_json 2>/dev/null \
+    | GROUP="$group" "$(yq_bin)" -p=json eval '
+        . as $root |
+        (.proxies | to_entries | .[] | select(.key == env(GROUP)) | .value.all // []) | .[] |
+        . as $n |
+        $n + "\t" + (
+          ($root.proxies[$n].history | select(length > 0) | .[-1].delay // 0) // 0 |
+          tostring
+        )
+      ' - 2>/dev/null
+}
+
 proxy_node_match_key() {
   local node="$1"
 
@@ -833,13 +879,40 @@ proxy_group_current_display() {
 }
 
 proxy_group_display_list() {
-  local group
+  proxy_groups_json \
+    | "$(yq_bin)" -p=json eval '
+        .proxies | to_entries | .[] |
+        select(.value.all != null) |
+        select(
+          (.value.type // "" | downcase | sub("[-_ ]+"; "")) as $t |
+          ($t == "selector" or $t == "urltest" or $t == "fallback" or $t == "loadbalance")
+        ) |
+        .key
+      ' - 2>/dev/null
+}
 
-  while IFS= read -r group; do
-    [ -n "${group:-}" ] || continue
-    proxy_group_can_show_candidates "$group" || continue
-    echo "$group"
-  done < <(proxy_group_list)
+proxy_node_url_encode() {
+  local byte code char out=""
+
+  while IFS= read -r byte; do
+    [ -n "${byte:-}" ] || continue
+    code=$((16#$byte))
+    if { [ "$code" -ge 48 ] && [ "$code" -le 57 ]; } \
+      || { [ "$code" -ge 65 ] && [ "$code" -le 90 ]; } \
+      || { [ "$code" -ge 97 ] && [ "$code" -le 122 ]; } \
+      || [ "$byte" = "2d" ] || [ "$byte" = "2e" ] || [ "$byte" = "5f" ] || [ "$byte" = "7e" ]; then
+      printf -v char "\\x$byte"
+      out+="$char"
+    else
+      out+="%${byte^^}"
+    fi
+  done < <(printf '%s' "$1" | od -An -tx1 -v | tr ' ' '\n')
+
+  printf '%s' "$out"
+}
+
+proxy_json_string_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 proxy_group_select() {
@@ -848,6 +921,7 @@ proxy_group_select() {
   local base secret
   local code response_file response_body
   local available_node found
+  local group_enc node_json
 
   [ -n "${group:-}" ] || die "策略组名称不能为空"
   [ -n "${node:-}" ] || die "节点名称不能为空"
@@ -871,13 +945,15 @@ proxy_group_select() {
 
   base="$(controller_api_base)"
   secret="$(controller_secret)"
+  group_enc="$(proxy_node_url_encode "$group")"
+  node_json="$(proxy_json_string_escape "$node")"
   response_file="$(mktemp)"
   code="$(
     curl -sS -o "$response_file" -w "%{http_code}" -X PUT \
       -H "Content-Type: application/json" \
       ${secret:+-H "Authorization: Bearer $secret"} \
-      --data "{\"name\":\"$node\"}" \
-      "$base/proxies/$group"
+      --data "{\"name\":\"$node_json\"}" \
+      "$base/proxies/$group_enc"
   )"
 
   if [ "${code:-000}" -lt 200 ] || [ "${code:-000}" -ge 300 ]; then
