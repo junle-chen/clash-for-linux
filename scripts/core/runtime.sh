@@ -251,7 +251,7 @@ resolve_subconverter() {
     *) die "暂不支持的 subconverter 架构：$arch" ;;
   esac
 
-  url="https://github.com/tindy2013/subconverter/releases/download/${version}/${file}"
+  url="https://github.com/asdlokj1qpi233/subconverter/releases/download/${version}/${file}"
   tmp_dir="$(mktemp -d)"
   tmp_file="$tmp_dir/$file"
   extract_dir="$tmp_dir/extract"
