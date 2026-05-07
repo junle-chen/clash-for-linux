@@ -379,6 +379,33 @@ render_base_config() {
   fi
 }
 
+config_allow_lan() {
+  local file="$CONFIG_DIR/template.yaml"
+  local value
+
+  ensure_config_files
+  value="$("$(yq_bin)" eval '.["allow-lan"] // true' "$file" 2>/dev/null | head -n 1)"
+  case "$value" in
+    false) echo "false" ;;
+    *) echo "true" ;;
+  esac
+}
+
+set_config_allow_lan() {
+  local value="$1"
+  local file="$CONFIG_DIR/template.yaml"
+
+  case "$value" in
+    true|false) ;;
+    *) die "allow-lan 只允许 true 或 false" ;;
+  esac
+
+  ensure_config_files
+  ALLOW_LAN_VALUE="$value" "$(yq_bin)" eval -i '
+    .["allow-lan"] = (env(ALLOW_LAN_VALUE) == "true")
+  ' "$file"
+}
+
 subscription_url_scheme() {
   local url="$1"
 
@@ -766,7 +793,7 @@ normalize_runtime_config() {
   local file="$1"
   local mixed_port controller tun_enable_value tun_stack_value dns_port_value controller_secret_value
   local tun_auto_route_value tun_auto_redirect_value tun_strict_route_value tun_dns_hijack_value
-  local dashboard_dir_value
+  local dashboard_dir_value allow_lan_value
   local resolved_ports err_file output
 
   [ -s "$file" ] || die "待规范化的配置文件不存在：$file"
@@ -785,10 +812,12 @@ normalize_runtime_config() {
   dns_port_value="$CLASH_DNS_PORT_RESOLVED"
   controller_secret_value="$(ensure_controller_secret)"
   dashboard_dir_value="$(runtime_dashboard_dir)"
+  allow_lan_value="$(config_allow_lan 2>/dev/null || echo true)"
 
   err_file="$(mktemp)"
   if ! mixed_port="$mixed_port" \
     controller="$controller" \
+    allow_lan_value="$allow_lan_value" \
     tun_enable_value="$tun_enable_value" \
     tun_stack_value="$tun_stack_value" \
     tun_auto_route_value="$tun_auto_route_value" \
@@ -804,7 +833,7 @@ normalize_runtime_config() {
       .secret = env(controller_secret_value) |
       .["external-ui"] = env(dashboard_dir_value) |
       .["external-ui-url"] = "/ui" |
-      .["allow-lan"] = (.["allow-lan"] // true) |
+      .["allow-lan"] = (env(allow_lan_value) == "true") |
       .mode = "rule" |
       .["log-level"] = (.["log-level"] // "info") |
 
