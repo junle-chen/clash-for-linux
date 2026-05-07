@@ -5,6 +5,35 @@ source "${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/scri
 # shellcheck source=scripts/core/config.sh
 source "${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/scripts/core/config.sh"
 
+GEO_ASSET_DOWNLOADS=(
+  "resources/geo/Country.mmdb https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
+  "resources/geo/geoip.metadb https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb"
+  "resources/geo/GeoLite2-ASN.mmdb https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
+  "resources/geo/GeoIP.dat https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
+  "resources/geo/GeoSite.dat https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+)
+
+resolve_geo_assets() {
+  case "${CLASH_PREDOWNLOAD_GEO:-true}" in
+    0|false|no|off|disable|disabled|FALSE|NO|OFF) return 0 ;;
+  esac
+
+  [ -n "${PROJECT_DIR:-}" ] || return 0
+
+  local item path url file target
+
+  for item in "${GEO_ASSET_DOWNLOADS[@]}"; do
+    path="${item%% *}"
+    url="${item#* }"
+    file="$(basename "$path")"
+    target="$RUNTIME_DIR/$file"
+
+    if ! copy_bundled_asset "geo" "latest" "$file" "$target" "$file"; then
+      download_file "$url" "$target" "$file"
+    fi
+  done
+}
+
 resolve_yq() {
   local arch version file url tmp_dir tmp_file
 
