@@ -1754,6 +1754,19 @@ runtime_config_controller_port() {
   echo "$port"
 }
 
+runtime_config_allow_lan() {
+  local file
+  local value
+  file="$(runtime_config_file)"
+  [ -s "$file" ] || return 1
+
+  value="$("$(yq_bin)" eval '.["allow-lan"] // true' "$file" 2>/dev/null | head -n 1)"
+  case "$value" in
+    false) echo "false" ;;
+    *) echo "true" ;;
+  esac
+}
+
 runtime_port_value_is_valid() {
   local port="${1:-}"
 

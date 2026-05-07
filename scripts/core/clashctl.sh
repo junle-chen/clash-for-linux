@@ -34,6 +34,7 @@ Usage:
   config kernel mihomo|clash     🧩 切换指定内核
   mixin                          🧩 Mixin 配置管理
   relay                          🔗 多跳节点管理
+  lan                            🏠 局域网代理管理
   
 
 📦 Subscription:
@@ -45,6 +46,7 @@ Usage:
 🕹️  Control:
   clashui                        🕹️  查看 Web 控制台
   secret                         🔑 查看或设置 Web 密钥
+  lan on|off|status              🏠 开启 / 关闭局域网代理
 
 🧪 Transparent proxy:
   tun                            🧪 Tun 模式管理
@@ -2301,6 +2303,7 @@ status_port_adjustment_brief() {
 
 print_status_summary_compact() {
   local profile mixed_port controller controller_lan controller_public
+  local allow_lan lan_proxy
   local running_text user_connectivity user_risk current_proxy_brief system_proxy_text
   local current_active dashboard_text dashboard_source_text dashboard_policy_text secret_text
   local tun_text bind_failure_text next_action
@@ -2309,6 +2312,7 @@ print_status_summary_compact() {
   [ -n "${profile:-}" ] || profile="default"
 
   mixed_port="$(status_read_mixed_port 2>/dev/null || true)"
+  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo true)"
   controller="$(status_read_controller 2>/dev/null || true)"
   controller_lan="$(status_read_controller_lan 2>/dev/null || true)"
   controller_public="$(status_read_controller_public 2>/dev/null || true)"
@@ -2386,6 +2390,12 @@ print_status_summary_compact() {
 
   if [ -n "${mixed_port:-}" ] && [ "$mixed_port" != "null" ]; then
     echo "🌐 本地代理：http://127.0.0.1:${mixed_port}"
+    if [ "$allow_lan" = "true" ]; then
+      lan_proxy="$(ui_lan_ip 2>/dev/null || true)"
+      [ -n "${lan_proxy:-}" ] && echo "🏠 局域网代理：http://${lan_proxy}:${mixed_port}"
+    else
+      echo "🏠 局域网代理：已关闭"
+    fi
   else
     echo "🌐 本地代理：未知"
   fi
@@ -2410,6 +2420,7 @@ print_status_summary_compact() {
 
 print_status_summary_verbose() {
   local running_text profile mixed_port controller controller_lan controller_public
+  local allow_lan lan_proxy
   local current_active build_active_sources build_failed_active_sources build_status build_time
   local build_block_reason build_block_time
   local last_switch_from last_switch_to last_switch_time
@@ -2426,6 +2437,7 @@ print_status_summary_verbose() {
   [ -n "${profile:-}" ] || profile="default"
 
   mixed_port="$(status_read_mixed_port 2>/dev/null || true)"
+  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo true)"
   controller="$(status_read_controller 2>/dev/null || true)"
   controller_lan="$(status_read_controller_lan 2>/dev/null || true)"
   controller_public="$(status_read_controller_public 2>/dev/null || true)"
@@ -2532,6 +2544,12 @@ print_status_summary_verbose() {
   echo "🔧 Profile：$profile"
   if [ -n "${mixed_port:-}" ] && [ "$mixed_port" != "null" ]; then
     echo "🌐 本地代理：http://127.0.0.1:${mixed_port}"
+    if [ "$allow_lan" = "true" ]; then
+      lan_proxy="$(ui_lan_ip 2>/dev/null || true)"
+      [ -n "${lan_proxy:-}" ] && echo "🏠 局域网代理：http://${lan_proxy}:${mixed_port}"
+    else
+      echo "🏠 局域网代理：已关闭"
+    fi
   else
     echo "🌐 本地代理：未知"
   fi
@@ -2960,6 +2978,7 @@ cmd_ui_help_summary() {
   printf '  %-18s %s\n' "clashctl use" "💱 切换订阅"
   printf '  %-18s %s\n' "clashctl ls" "📜 查看订阅列表"
   echo "📌 高级"
+  printf '  %-18s %s\n' "clashctl lan" "🏠 局域网代理管理"
   printf '  %-18s %s\n' "clashctl tun" "🧪 Tun 模式管理"
   printf '  %-18s %s\n' "clashctl mixin" "🧩 Mixin 配置管理"
   printf '  %-18s %s\n' "clashctl sub" "🧩 订阅高级管理（启用 / 禁用 / 重命名 / 删除）"
@@ -3886,6 +3905,67 @@ cmd_config() {
       ;;
     *)
       die_usage "未知的 config 子命令：$1" "clashctl config"
+      ;;
+  esac
+}
+
+print_lan_status() {
+  local allow_lan mixed_port lan_ip
+
+  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo true)"
+  mixed_port="$(status_read_mixed_port 2>/dev/null || runtime_config_mixed_port 2>/dev/null || true)"
+  lan_ip="$(ui_lan_ip 2>/dev/null || true)"
+
+  ui_title "🏠 局域网代理"
+  if [ "$allow_lan" = "true" ]; then
+    ui_kv "📶" "状态" "已开启"
+    if [ -n "${lan_ip:-}" ] && [ -n "${mixed_port:-}" ] && [ "$mixed_port" != "null" ]; then
+      ui_kv "🏠" "局域网代理" "http://${lan_ip}:${mixed_port}"
+    else
+      ui_kv "🏠" "局域网代理" "等待运行配置生成"
+    fi
+  else
+    ui_kv "📶" "状态" "已关闭"
+  fi
+  ui_kv "🔧" "配置项" "allow-lan: ${allow_lan}"
+  ui_blank
+}
+
+cmd_lan() {
+  local action
+  prepare
+
+  action="${1:-status}"
+  case "$action" in
+    on|enable)
+      set_config_allow_lan true
+      regenerate_config
+      apply_runtime_change_after_config_mutation
+      success "局域网代理已开启"
+      print_lan_status
+      print_config_apply_feedback
+      ;;
+    off|disable)
+      set_config_allow_lan false
+      regenerate_config
+      apply_runtime_change_after_config_mutation
+      success "局域网代理已关闭"
+      print_lan_status
+      print_config_apply_feedback
+      ;;
+    status)
+      print_lan_status
+      ui_next "clashctl lan on"
+      ui_blank
+      ;;
+    -h|--help|help|"")
+      echo "📜 用法："
+      echo "  clashctl lan status"
+      echo "  clashctl lan on"
+      echo "  clashctl lan off"
+      ;;
+    *)
+      die_usage "未知的 lan 子命令：$action" "clashctl lan on|off|status"
       ;;
   esac
 }
@@ -7303,6 +7383,7 @@ case "$cmd" in
   tun)            cmd_tun "$@" ;;
   dev)            cmd_dev "$@" ;;
   config)         cmd_config "$@" ;;
+  lan)            cmd_lan "$@" ;;
   mixin)          cmd_mixin "$@" ;;
   relay)          cmd_relay "$@" ;;
   profile)        cmd_profile "$@" ;;

@@ -70,6 +70,7 @@ bash install.sh
   clashctl secret      🔑 查看密钥
   clashctl secret 123  🔐 设置密钥
 📌 高级
+  clashctl lan       🏠 局域网代理管理
   clashctl tun       🧪 Tun 模式管理
   clashctl boot      🚦 开机代理接管管理
   clashctl mixin     🧩 Mixin 配置管理
@@ -114,6 +115,20 @@ $ clashsecret
 - `clashctl secret` 与 `clashsecret` 都支持无参数查看、有参数直接设置。
 - 默认使用 [zashboard](https://github.com/Zephyruso/zashboard) 作为控制台前端，如需更换可自行配置。
 - 若需将控制台暴露到公网，建议定期更换访问密钥，或通过 `SSH` 端口转发方式进行安全访问。
+
+------
+
+## 🏠 局域网代理
+
+项目默认开启局域网代理：运行配置会写入 `allow-lan: true`，并把 `external-controller` 绑定到 `0.0.0.0`，避免订阅文件里的 `allow-lan: false` 覆盖项目默认值。
+
+```bash
+clashctl lan status
+clashctl lan on
+clashctl lan off
+```
+
+开启后，同一局域网设备可把 HTTP / SOCKS 代理地址设置为 `http://<本机局域网IP>:<mixed-port>`，端口默认是 `7890`；如访问不了，请检查系统防火墙是否放行该端口。
 
 ------
 
