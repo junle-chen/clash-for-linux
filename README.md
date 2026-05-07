@@ -287,7 +287,7 @@ CLASH_SUBSCRIPTION_URL=https://example.com/sub
 MIHOMO_VERSION=latest
 CLASH_VERSION=latest
 YQ_VERSION=v4.44.3
-SUBCONVERTER_VERSION=v0.9.0
+SUBCONVERTER_VERSION=v0.9.9
 MIHOMO_DOWNLOAD_BASE=https://github.com/MetaCubeX/mihomo/releases/download
 CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
@@ -507,7 +507,7 @@ chmod +x /etc/rc.local
 
 - [clash](https://clash.wiki/)
 - [mihomo](https://github.com/MetaCubeX/mihomo)
-- [subconverter](https://github.com/tindy2013/subconverter)
+- [subconverter](https://github.com/asdlokj1qpi233/subconverter)
 - [zashboard](https://github.com/Zephyruso/zashboard)
 
 # 常见问题
