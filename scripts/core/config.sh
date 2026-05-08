@@ -394,6 +394,7 @@ config_allow_lan() {
 set_config_allow_lan() {
   local value="$1"
   local file="$CONFIG_DIR/template.yaml"
+  local mixin_file_path
 
   case "$value" in
     true|false) ;;
@@ -404,6 +405,13 @@ set_config_allow_lan() {
   ALLOW_LAN_VALUE="$value" "$(yq_bin)" eval -i '
     .["allow-lan"] = (env(ALLOW_LAN_VALUE) == "true")
   ' "$file"
+
+  ensure_mixin_file
+  mixin_file_path="$(mixin_file)"
+  ALLOW_LAN_VALUE="$value" "$(yq_bin)" eval -i '
+    .override = (.override // {}) |
+    .override["allow-lan"] = (env(ALLOW_LAN_VALUE) == "true")
+  ' "$mixin_file_path"
 }
 
 subscription_url_scheme() {
