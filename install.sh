@@ -24,6 +24,8 @@ ensure_required_commands
 init_layout
 ensure_dashboard_deploy_prerequisites
 
+resolve_geo_assets
+
 resolve_runtime_kernel
 resolve_yq
 resolve_subconverter

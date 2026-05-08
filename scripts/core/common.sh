@@ -419,7 +419,8 @@ copy_bundled_asset() {
   for candidate in \
     "$root/$category/$file" \
     "$root/$category/$version/$file" \
-    "$root/$file"; do
+    "$root/$file" \
+    "$RESOURCE_DIR/$category/$file"; do
     [ -s "$candidate" ] || continue
 
     mkdir -p "$(dirname "$out")"
