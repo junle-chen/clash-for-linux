@@ -1942,6 +1942,57 @@ system_proxy_supported_state() {
   fi
 }
 
+persistent_system_proxy_text() {
+  local status
+
+  status="$(system_proxy_status 2>/dev/null || echo off)"
+  if [ "$status" = "on" ]; then
+    if system_proxy_matches_runtime 2>/dev/null; then
+      echo "on"
+    else
+      echo "mismatch"
+    fi
+    return 0
+  fi
+
+  if ! system_proxy_supported; then
+    echo "unsupported"
+    return 0
+  fi
+
+  echo "off"
+}
+
+status_local_proxy_http_url() {
+  local port
+
+  port="$(status_read_mixed_port 2>/dev/null || true)"
+  [ -n "${port:-}" ] && [ "$port" != "null" ] || return 1
+
+  echo "http://127.0.0.1:${port}"
+}
+
+current_process_proxy_env_text() {
+  local expected value
+
+  expected="$(status_local_proxy_http_url 2>/dev/null || true)"
+  [ -n "${expected:-}" ] || {
+    echo "unknown"
+    return 0
+  }
+
+  value="${http_proxy:-${HTTP_PROXY:-${https_proxy:-${HTTPS_PROXY:-}}}}"
+  [ -n "${value:-}" ] || value="${all_proxy:-${ALL_PROXY:-}}"
+
+  if [ -z "${value:-}" ]; then
+    echo "off"
+  elif [ "$value" = "$expected" ]; then
+    echo "on"
+  else
+    echo "mismatch"
+  fi
+}
+
 connectivity_issue_code() {
   local active group_count
   local bind_failure_kind
@@ -1996,22 +2047,13 @@ connectivity_issue_code() {
     return 0
   fi
 
-  if ! system_proxy_supported; then
-    echo "system_proxy_unsupported"
-    return 0
-  fi
-
-  if [ "$(system_proxy_status 2>/dev/null || echo off)" != "on" ]; then
-    echo "system_proxy_off"
-    return 0
-  fi
-
-  if ! system_proxy_matches_runtime; then
-    echo "system_proxy_mismatch"
-    return 0
-  fi
-
-  echo "ok"
+  case "$(persistent_system_proxy_text)" in
+    on) echo "local_proxy_ready_system_proxy_on" ;;
+    unsupported) echo "local_proxy_ready_system_proxy_unsupported" ;;
+    mismatch) echo "local_proxy_ready_system_proxy_mismatch" ;;
+    off) echo "local_proxy_ready_system_proxy_off" ;;
+    *) echo "local_proxy_ready_system_proxy_off" ;;
+  esac
 }
 
 connectivity_issue_text() {
@@ -2021,7 +2063,7 @@ connectivity_issue_text() {
   port="$(runtime_mixed_port_bind_failure_port 2>/dev/null || status_read_mixed_port 2>/dev/null || true)"
 
   case "$issue" in
-    ok) echo "可用（代理链路已闭环）" ;;
+    ok|local_proxy_ready_system_proxy_on) echo "可用（本地代理已就绪，系统代理已接管）" ;;
     mixed_port_bind_denied) echo "不可用（mixed-port ${port:-unknown} 绑定被拒绝）" ;;
     mixed_port_address_in_use) echo "不可用（mixed-port ${port:-unknown} 端口被占用）" ;;
     mixed_port_bind_failed) echo "不可用（mixed-port ${port:-unknown} 绑定失败）" ;;
@@ -2030,16 +2072,16 @@ connectivity_issue_text() {
     config_invalid) echo "异常（当前运行配置不可用）" ;;
     subscription_unhealthy) echo "异常（当前主订阅不可用）" ;;
     proxy_control_broken) echo "异常（当前无可用策略组或节点控制面异常）" ;;
-    system_proxy_unsupported) echo "未接管（当前环境不支持系统代理）" ;;
-    system_proxy_off) echo "未接管（系统代理未开启）" ;;
-    system_proxy_mismatch) echo "异常（系统代理端口与运行时不一致）" ;;
+    system_proxy_unsupported|local_proxy_ready_system_proxy_unsupported) echo "本地代理可用，系统流量未自动接管（系统代理持久写入不可用）" ;;
+    system_proxy_off|local_proxy_ready_system_proxy_off) echo "本地代理可用，系统流量未自动接管（系统代理未开启）" ;;
+    system_proxy_mismatch|local_proxy_ready_system_proxy_mismatch) echo "本地代理可用，但系统代理端口与当前运行端口不一致" ;;
     *) echo "未知" ;;
   esac
 }
 
 connectivity_next_action() {
   case "$(connectivity_issue_code)" in
-    ok)
+    ok|local_proxy_ready_system_proxy_on)
       echo "clashctl select"
       ;;
     runtime_stopped)
@@ -2060,13 +2102,13 @@ connectivity_next_action() {
     proxy_control_broken)
       echo "clashctl status --verbose"
       ;;
-    system_proxy_unsupported)
-      echo "clashctl doctor"
+    system_proxy_unsupported|local_proxy_ready_system_proxy_unsupported)
+      echo "浏览器/应用手动设置代理，或在当前 Shell 使用 clashon"
       ;;
-    system_proxy_off)
-      echo "clashon"
+    system_proxy_off|local_proxy_ready_system_proxy_off)
+      echo "浏览器/应用手动设置代理，或在当前 Shell 使用 clashon"
       ;;
-    system_proxy_mismatch)
+    system_proxy_mismatch|local_proxy_ready_system_proxy_mismatch)
       echo "clashoff && clashon"
       ;;
     *)
@@ -2078,7 +2120,7 @@ connectivity_next_action() {
 connectivity_evidence_lines() {
   local runtime_running controller_ok build_status subscription_status
   local group_count expected_proxy actual_proxy active config_source
-  local system_proxy_state system_proxy_supported_text
+  local system_proxy_state system_proxy_supported_text process_proxy_env mixed_port local_proxy_listening
   local bind_failure_kind bind_failure_line
 
   if status_is_running; then
@@ -2098,12 +2140,21 @@ connectivity_evidence_lines() {
   group_count="$(proxy_group_count 2>/dev/null || echo 0)"
   active="$(active_subscription_name 2>/dev/null || true)"
   config_source="$(status_runtime_config_source 2>/dev/null || true)"
-  expected_proxy="$(proxy_http_url 2>/dev/null || true)"
+  expected_proxy="$(status_local_proxy_http_url 2>/dev/null || true)"
+  mixed_port="$(status_read_mixed_port 2>/dev/null || true)"
+  local_proxy_listening="false"
+  if [ -n "${mixed_port:-}" ] && [ "$mixed_port" != "null" ] && is_port_in_use "$mixed_port"; then
+    local_proxy_listening="true"
+  fi
   actual_proxy="$(system_proxy_http_value 2>/dev/null || true)"
-  system_proxy_state="$(system_proxy_status 2>/dev/null || echo off)"
+  system_proxy_state="$(persistent_system_proxy_text)"
   system_proxy_supported_text="$(system_proxy_supported_state)"
+  process_proxy_env="$(current_process_proxy_env_text)"
   bind_failure_kind="$(runtime_mixed_port_bind_failure_kind 2>/dev/null || true)"
   bind_failure_line="$(runtime_mixed_port_bind_failure_line 2>/dev/null || true)"
+  case "${group_count:-0}" in
+    ''|*[!0-9]*) group_count=0 ;;
+  esac
 
   echo "• runtime_running = ${runtime_running:-false}"
   echo "• controller_reachable = ${controller_ok:-false}"
@@ -2115,16 +2166,15 @@ connectivity_evidence_lines() {
   echo "• config_source = ${config_source:-unknown}"
   echo "• proxy_group_count = ${group_count:-0}"
 
-  echo "• system_proxy_supported = ${system_proxy_supported_text:-false}"
-  echo "• system_proxy_enabled = ${system_proxy_state:-off}"
+  echo "• local_proxy_listening = ${local_proxy_listening:-false}"
+  [ -n "${expected_proxy:-}" ] && echo "• local_proxy_http = $expected_proxy"
+  echo "• system_proxy_persistent_supported = ${system_proxy_supported_text:-false}"
+  echo "• system_proxy_persistent_status = ${system_proxy_state:-off}"
+  echo "• current_process_proxy_env = ${process_proxy_env:-unknown}"
   echo "• runtime_backend = $(runtime_backend 2>/dev/null || echo unknown)"
   echo "• boot_runtime_autostart = $(status_service_autostart_text)"
   echo "• boot_proxy_keep = $(status_boot_proxy_keep_text)"
   [ -n "${actual_proxy:-}" ] && echo "• system_proxy_http = ${actual_proxy}"
-
-  if [ -n "${expected_proxy:-}" ]; then
-    echo "• runtime_proxy_http = $expected_proxy"
-  fi
   echo "• tun_enabled = $(status_tun_enabled 2>/dev/null || echo false)"
   echo "• tun_effective = $(status_tun_effective_status 2>/dev/null || echo unknown)"
   echo "• tun_container_mode = $(status_tun_container_mode 2>/dev/null || echo unknown)"
@@ -2331,12 +2381,8 @@ print_status_summary_compact() {
   user_connectivity="$(connectivity_issue_text)"
   user_risk="$(status_user_risk_text)"
   current_proxy_brief="$(status_current_proxy_brief)"
-  next_action="$(system_state_default_action 2>/dev/null || echo 'clashctl status --verbose')"
-  if system_proxy_supported; then
-    system_proxy_text="$(system_proxy_status 2>/dev/null || echo off)"
-  else
-    system_proxy_text="unsupported"
-  fi
+  next_action="$(connectivity_next_action 2>/dev/null || system_state_default_action 2>/dev/null || echo 'clashctl status --verbose')"
+  system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
   if [ -f "$(runtime_dashboard_dir)/index.html" ]; then
     dashboard_text="已部署"
   else
@@ -2383,7 +2429,7 @@ print_status_summary_compact() {
   echo "🐱 开机代理接管：$(status_boot_auto_proxy_text)"
   echo "🧪 环境模式：$(status_container_mode_text)"
   echo "🧪 Tun 状态：${tun_text:-未知}"
-  echo "📜 系统代理状态：${system_proxy_text}"
+  echo "📜 系统代理持久接管：${system_proxy_text}"
   echo "🧩 Dashboard：${dashboard_text}（来源：${dashboard_source_text}）"
   echo "🧩 Dashboard 策略：${dashboard_policy_text}"
   echo "🔐 控制器密钥：${secret_text}"
@@ -2483,7 +2529,7 @@ print_status_summary_verbose() {
   user_connectivity="$(connectivity_issue_text)"
   user_risk="$(status_user_risk_text)"
   current_proxy_brief="$(status_current_proxy_brief)"
-  next_action="$(system_state_default_action 2>/dev/null || echo 'clashctl status --verbose')"
+  next_action="$(connectivity_next_action 2>/dev/null || system_state_default_action 2>/dev/null || echo 'clashctl status --verbose')"
   install_backend_text="$(status_runtime_backend_text)"
   install_container_text="$(status_container_mode_text)"
   install_verify_text="$(status_install_verify_brief)"
@@ -2497,11 +2543,7 @@ print_status_summary_verbose() {
   tun_verify_result="$(status_tun_last_verify_result 2>/dev/null || true)"
   tun_verify_reason="$(status_tun_last_verify_reason 2>/dev/null || true)"
   tun_verify_time="$(status_tun_last_verify_time 2>/dev/null || true)"
-  if system_proxy_supported; then
-    system_proxy_text="$(system_proxy_status 2>/dev/null || echo off)"
-  else
-    system_proxy_text="unsupported"
-  fi
+  system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
   if [ -f "$(runtime_dashboard_dir)/index.html" ]; then
     dashboard_text="已部署"
   else
@@ -2577,7 +2619,7 @@ print_status_summary_verbose() {
   echo "🧪 环境模式：${install_container_text:-unknown}"
   echo "🧩 安装验证：${install_verify_text:-unknown}"
   echo "📜 端口裁决：${port_adjustment_text:-unknown}"
-  echo "📜 系统代理状态：${system_proxy_text}"
+  echo "📜 系统代理持久接管：${system_proxy_text}"
   echo "🧩 Dashboard：${dashboard_text}（来源：${dashboard_source_text}）"
   echo "🧩 Dashboard 策略：${dashboard_policy_text}"
   echo "🔐 控制器密钥：${secret_text}"
@@ -3612,11 +3654,7 @@ doctor_runtime_events() {
   build_applied="$(status_runtime_build_applied 2>/dev/null || true)"
   build_applied_time="$(status_runtime_build_applied_time 2>/dev/null || true)"
   build_applied_reason="$(status_runtime_build_applied_reason 2>/dev/null || true)"
-  if system_proxy_supported; then
-    system_proxy_text="$(system_proxy_status 2>/dev/null || echo off)"
-  else
-    system_proxy_text="unsupported"
-  fi
+  system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
   if [ -f "$(runtime_dashboard_dir)/index.html" ]; then
     dashboard_status="已部署"
   else
@@ -3635,7 +3673,11 @@ doctor_runtime_events() {
 
   doctor_ok "当前风险等级：${risk_level:-unknown}"
   doctor_ok "当前配置来源：${config_source:-unknown}"
-  doctor_ok "系统代理状态：${system_proxy_text}"
+  if [ "$system_proxy_text" = "unsupported" ]; then
+    doctor_warn "系统代理持久接管：unsupported（当前用户不可写 $(system_proxy_env_file 2>/dev/null || echo /etc/environment)）"
+  else
+    doctor_ok "系统代理持久接管：${system_proxy_text}"
+  fi
   doctor_ok "Dashboard 运行目录：${dashboard_status}（来源：${dashboard_source}）"
   doctor_ok ".env 控制器密钥：${secret_status}"
 
@@ -4569,10 +4611,12 @@ doctor_primary_conclusion() {
 }
 
 doctor_recommendation_lines() {
-  local active_sub bind_failure_kind
+  local active_sub bind_failure_kind system_proxy_text mixed_port
 
   active_sub="$(active_subscription_name 2>/dev/null || true)"
   bind_failure_kind="$(runtime_mixed_port_bind_failure_kind 2>/dev/null || true)"
+  system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
+  mixed_port="$(status_read_mixed_port 2>/dev/null || true)"
 
   if ! runtime_config_exists; then
     if [ -n "$(subscription_url 2>/dev/null || true)" ]; then
@@ -4609,12 +4653,26 @@ doctor_recommendation_lines() {
     return 0
   fi
 
-  echo "💡 clashctl status"
-  echo "💡 clashctl select"
+  case "$system_proxy_text" in
+    unsupported|off)
+      if [ -n "${mixed_port:-}" ] && [ "$mixed_port" != "null" ]; then
+        echo "💡 浏览器/应用手动设置 HTTP 代理：http://127.0.0.1:${mixed_port}"
+      fi
+      echo "💡 当前 Shell 可使用 clashon 注入代理变量"
+      ;;
+    mismatch)
+      echo "💡 clashoff && clashon"
+      ;;
+    *)
+      echo "💡 clashctl status"
+      echo "💡 clashctl select"
+      ;;
+  esac
 }
 
 doctor_evidence_lines() {
   local active_sub mixed_port controller bind_failure_kind bind_failure_line dns_port
+  local system_proxy_text process_proxy_env
 
   active_sub="$(active_subscription_name 2>/dev/null || true)"
   mixed_port="$(runtime_mixed_port_bind_failure_port 2>/dev/null || status_read_mixed_port 2>/dev/null || true)"
@@ -4622,6 +4680,8 @@ doctor_evidence_lines() {
   bind_failure_kind="$(runtime_mixed_port_bind_failure_kind 2>/dev/null || true)"
   bind_failure_line="$(runtime_mixed_port_bind_failure_line 2>/dev/null || true)"
   dns_port="$(runtime_config_dns_port 2>/dev/null || true)"
+  system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
+  process_proxy_env="$(current_process_proxy_env_text 2>/dev/null || echo unknown)"
 
   if runtime_config_exists; then
     echo "🔍 运行配置：存在"
@@ -4675,11 +4735,15 @@ doctor_evidence_lines() {
     else
       echo "🔍 代理端口：${mixed_port}（未监听）"
     fi
+    echo "🔍 本地代理：http://127.0.0.1:${mixed_port}"
   fi
 
   if [ -n "${controller:-}" ] && [ "$controller" != "null" ]; then
     echo "🔍 控制器地址：$(display_controller_local_addr "$controller" 2>/dev/null || echo "$controller")"
   fi
+
+  echo "🔍 系统代理持久接管：${system_proxy_text}"
+  echo "🔍 当前命令环境代理：${process_proxy_env}"
 }
 
 set_controller_secret() {
