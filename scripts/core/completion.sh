@@ -258,7 +258,7 @@ _clash_for_linux_complete_tun() {
   COMPREPLY=()
 
   if [ "$rel_index" -eq 1 ]; then
-    _clash_for_linux_add_matches "$cur" status on off doctor
+    _clash_for_linux_add_matches "$cur" status on off on-proxy-off off-proxy-on proxy-off proxy-on doctor log logs
   fi
 }
 

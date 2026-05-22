@@ -114,6 +114,7 @@ $ clashsecret
 - 可通过浏览器打开 `Web` 控制台进行可视化操作，例如切换节点、查看日志等。
 - `clashctl secret` 与 `clashsecret` 都支持无参数查看、有参数直接设置。
 - 默认使用 [zashboard](https://github.com/Zephyruso/zashboard) 作为控制台前端，如需更换可自行配置。
+- 运行配置会把 `external-ui` 指向本地 Dashboard 目录，并把 `external-ui-url` 指向 zashboard 的 `dist.zip` 下载地址；面板内 `/upgrade/ui` 会使用该地址更新前端。
 - 若需将控制台暴露到公网，建议定期更换访问密钥，或通过 `SSH` 端口转发方式进行安全访问。
 
 ------
@@ -445,11 +446,17 @@ clashctl relay remove 多跳-示例
 ```bash
 clashctl tun on
 clashctl tun off
+clashctl tun on-proxy-off
+clashctl tun off-proxy-on
 clashctl tun doctor
 clashctl tun logs
 ```
 
-Tun 用于透明接管链路。`tun on` 是动作反馈，展示当前关键配置和简短状态；完整证据请看：
+Tun 用于透明接管链路。`tun on` 只负责开启 Tun，不会自动关闭系统代理；如需切换到 Tun 接管并关闭系统代理，使用 `clashctl tun on-proxy-off`。如需关闭 Tun 并恢复普通系统代理模式，使用 `clashctl tun off-proxy-on`。
+
+`clashctl doctor` 会检查 Tun 与系统代理是否同时开启；如果同时开启，会提示 `clashctl tun on-proxy-off`，避免流量接管路径重复或排障混淆。
+
+`tun on` 是动作反馈，展示当前关键配置和简短状态；完整证据请看：
 
 ```bash
 clashctl tun doctor

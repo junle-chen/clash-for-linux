@@ -3241,6 +3241,32 @@ doctor_container_tun() {
   esac
 }
 
+doctor_tun_system_proxy() {
+  local tun_state system_proxy_state
+
+  doctor_print_title "Tun 与系统代理检查"
+
+  tun_state="$(tun_enabled 2>/dev/null || echo false)"
+  system_proxy_state="$(system_proxy_status 2>/dev/null || echo off)"
+
+  if [ "$tun_state" = "true" ]; then
+    doctor_ok "Tun 模式：已开启"
+  else
+    doctor_ok "Tun 模式：已关闭"
+  fi
+
+  if [ "$system_proxy_state" = "on" ]; then
+    doctor_ok "系统代理持久接管：已开启"
+  else
+    doctor_ok "系统代理持久接管：已关闭"
+  fi
+
+  if [ "$tun_state" = "true" ] && [ "$system_proxy_state" = "on" ]; then
+    doctor_warn "Tun 模式与系统代理同时开启，可能造成流量接管路径重复或排障混淆"
+    echo "    建议：clashctl tun on-proxy-off"
+  fi
+}
+
 doctor_dependencies() {
   local dashboard_source
 
@@ -3843,6 +3869,7 @@ cmd_doctor() {
   doctor_install_context
   doctor_dependencies
   doctor_container_tun
+  doctor_tun_system_proxy
   doctor_config
   doctor_subscription
   doctor_build
@@ -4571,6 +4598,11 @@ doctor_problem_lines() {
   if [ "$(status_build_last_status 2>/dev/null || true)" = "failed" ]; then
     echo "🚨 最近一次编译失败"
   fi
+
+  if [ "$(tun_enabled 2>/dev/null || echo false)" = "true" ] \
+    && [ "$(system_proxy_status 2>/dev/null || echo off)" = "on" ]; then
+    echo "🚨 Tun 模式与系统代理同时开启"
+  fi
 }
 
 doctor_primary_conclusion() {
@@ -4653,6 +4685,13 @@ doctor_recommendation_lines() {
     return 0
   fi
 
+  if [ "$(tun_enabled 2>/dev/null || echo false)" = "true" ] \
+    && [ "$(system_proxy_status 2>/dev/null || echo off)" = "on" ]; then
+    echo "💡 clashctl tun on-proxy-off"
+    echo "💡 如需恢复普通系统代理模式：clashctl tun off-proxy-on"
+    return 0
+  fi
+
   case "$system_proxy_text" in
     unsupported|off)
       if [ -n "${mixed_port:-}" ] && [ "$mixed_port" != "null" ]; then
@@ -4672,7 +4711,7 @@ doctor_recommendation_lines() {
 
 doctor_evidence_lines() {
   local active_sub mixed_port controller bind_failure_kind bind_failure_line dns_port
-  local system_proxy_text process_proxy_env
+  local system_proxy_text process_proxy_env tun_state system_proxy_state
 
   active_sub="$(active_subscription_name 2>/dev/null || true)"
   mixed_port="$(runtime_mixed_port_bind_failure_port 2>/dev/null || status_read_mixed_port 2>/dev/null || true)"
@@ -4682,6 +4721,8 @@ doctor_evidence_lines() {
   dns_port="$(runtime_config_dns_port 2>/dev/null || true)"
   system_proxy_text="$(persistent_system_proxy_text 2>/dev/null || echo unknown)"
   process_proxy_env="$(current_process_proxy_env_text 2>/dev/null || echo unknown)"
+  tun_state="$(tun_enabled 2>/dev/null || echo false)"
+  system_proxy_state="$(system_proxy_status 2>/dev/null || echo off)"
 
   if runtime_config_exists; then
     echo "🔍 运行配置：存在"
@@ -4744,6 +4785,7 @@ doctor_evidence_lines() {
 
   echo "🔍 系统代理持久接管：${system_proxy_text}"
   echo "🔍 当前命令环境代理：${process_proxy_env}"
+  echo "🔍 Tun 与系统代理：tun=${tun_state}, system_proxy=${system_proxy_state}"
 }
 
 set_controller_secret() {
@@ -4976,6 +5018,53 @@ cmd_tun_off() {
   fi
 
   print_tun_off_feedback "$verify_result"
+}
+
+cmd_tun_on_proxy_off() {
+  local system_proxy_rc
+
+  cmd_tun_on || return $?
+
+  if boot_proxy_keep_disable; then
+    ui_blank
+    ui_ok "系统代理已关闭，当前使用 Tun 模式接管"
+    ui_blank
+    return 0
+  fi
+
+  system_proxy_rc=$?
+  if [ "$system_proxy_rc" -eq 2 ]; then
+    ui_warn "当前环境不支持清理系统代理持久块，Tun 已按前序结果处理"
+  else
+    ui_warn "系统代理持久块清理失败，Tun 已按前序结果处理"
+  fi
+  ui_next "clashctl doctor"
+  ui_blank
+  return "$system_proxy_rc"
+}
+
+cmd_tun_off_proxy_on() {
+  local system_proxy_rc
+
+  cmd_tun_off || return $?
+
+  if system_proxy_enable; then
+    ui_blank
+    ui_ok "系统代理已开启，当前使用本地代理接管"
+    ui_blank
+    return 0
+  fi
+
+  system_proxy_rc=$?
+  write_runtime_value "RUNTIME_BOOT_PROXY_KEEP" "false" 2>/dev/null || true
+  if [ "$system_proxy_rc" -eq 2 ]; then
+    ui_warn "当前环境不支持系统代理持久接管，Tun 已按前序结果处理"
+  else
+    ui_warn "系统代理持久接管写入失败，Tun 已按前序结果处理"
+  fi
+  ui_next "clashctl doctor"
+  ui_blank
+  return "$system_proxy_rc"
 }
 
 tun_runtime_status_text() {
@@ -6024,6 +6113,15 @@ cmd_tun() {
     off)
       cmd_tun_off
       ;;
+    on-proxy-off|proxy-off)
+      cmd_tun_on_proxy_off
+      ;;
+    off-proxy-on|proxy-on)
+      cmd_tun_off_proxy_on
+      ;;
+    log|logs)
+      cmd_logs mihomo
+      ;;
     doctor)
       doctor_tun_checks
       ;;
@@ -6034,7 +6132,10 @@ cmd_tun() {
       echo "  clashctl tun status"
       echo "  clashctl tun on"
       echo "  clashctl tun off"
+      echo "  clashctl tun on-proxy-off"
+      echo "  clashctl tun off-proxy-on"
       echo "  clashctl tun doctor"
+      echo "  clashctl tun logs"
       echo
       echo "🧩 说明："
       echo "  Tun 属于高级接管能力"
