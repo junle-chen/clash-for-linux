@@ -22,7 +22,7 @@
 - 🧪 **端口自动检测与分配**：避免冲突
 - 🔄 **多订阅管理**：可以保存多个订阅，通过 `clashctl use` 切换当前主订阅。
 - 💫 **节点选择**：使用编号交互选择策略组和节点。
-- 🌐 **Tun 模式**：用于透明代理接管场景。
+- 🌐 **Tun 模式**：用于透明代理接管场景（需root方式安装）。
 - 🧠 **Mixin 机制**：可按需追加/覆盖 Clash 配置
 - 👤 **不同权限**：兼容 `root` 与普通用户环境。
 - 🔐 **安全默认配置**：自动生成或自定义 Secret
@@ -71,7 +71,7 @@ bash install.sh
   clashctl secret 123  🔐 设置密钥
 📌 高级
   clashctl lan       🏠 局域网代理管理
-  clashctl tun       🧪 Tun 模式管理
+  clashctl tun       🧪 Tun 模式管理（需root方式安装）
   clashctl boot      🚦 开机代理接管管理
   clashctl mixin     🧩 Mixin 配置管理
   clashctl relay     🔗 多跳节点管理
