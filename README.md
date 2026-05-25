@@ -510,6 +510,17 @@ chmod +x /etc/rc.local
 - [subconverter](https://github.com/asdlokj1qpi233/subconverter)
 - [zashboard](https://github.com/Zephyruso/zashboard)
 
+## 参考与致谢
+
+本项目在持续优化 Linux Clash / Mihomo 使用体验的过程中，参考了社区中一些优秀项目的命令行交互风格与目录组织方式，其中包括：
+
+- [nelvko/clash-for-linux-install](https://github.com/nelvko/clash-for-linux-install)
+
+本项目并非上述项目的 fork，也不是基于其代码直接二次开发；核心实现为独立编写，并在后续维护中逐步演进为当前架构。
+
+感谢相关开源项目对 Linux Clash / Mihomo 使用体验的探索。
+
+
 # 常见问题
 
 1. 部分Linux系统默认的 shell `/bin/sh` 被更改为 `dash`，运行脚本会出现报错（报错内容一般会有 `-en [ OK ]`）。建议使用 `bash xxx.sh` 运行脚本。
