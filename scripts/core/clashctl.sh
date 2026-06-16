@@ -4916,6 +4916,8 @@ cmd_tun_on() {
   local verify_result
   local container_mode risk_reason
 
+  guard_sudo_on_user_install "on" || return 1
+
   prepare
 
   container_mode="$(tun_container_mode 2>/dev/null || echo unknown)"
@@ -4944,12 +4946,21 @@ cmd_tun_on() {
   esac
 
   if ! can_manage_tun_safely; then
-    echo
-    echo "❗ Tun 模式无法开启"
-    echo "🚨 原因：当前环境不满足基础 Tun 条件"
-    echo "👉 下一步：clashctl tun doctor"
-    echo
-    return 1
+    # Fallback: check if the running mihomo process already has CAP_NET_ADMIN
+    # (covers the case where setcap was applied after the binary check fails
+    # due to getcap being unavailable, or the process received the capability
+    # through another mechanism).
+    local _fb_backend
+    _fb_backend="$(runtime_backend 2>/dev/null || echo unknown)"
+    if ! tun_process_has_cap_net_admin "$_fb_backend" 2>/dev/null; then
+      echo
+      echo "❗ Tun 模式无法开启"
+      echo "🚨 原因：当前环境不满足基础 Tun 条件"
+      echo "💡 若已通过 setcap 授权 mihomo，请确认 getcap 已安装并重试"
+      echo "👉 下一步：clashctl tun doctor"
+      echo
+      return 1
+    fi
   fi
 
   case "$(tun_kernel_support_level 2>/dev/null || echo unknown)" in
@@ -4995,6 +5006,8 @@ cmd_tun_on() {
 
 cmd_tun_off() {
   local verify_result
+
+  guard_sudo_on_user_install "off" || return 1
 
   prepare
 

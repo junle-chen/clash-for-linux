@@ -2030,6 +2030,14 @@ has_ip_command() {
   command -v ip >/dev/null 2>&1
 }
 
+kernel_binary_has_cap_net_admin() {
+  local _bin
+  _bin="$(runtime_kernel_bin 2>/dev/null || true)"
+  [ -n "${_bin:-}" ] && [ -x "${_bin}" ] || return 1
+  command -v getcap >/dev/null 2>&1 || return 1
+  getcap "$_bin" 2>/dev/null | grep -q 'cap_net_admin'
+}
+
 can_manage_tun_safely() {
   if ! tun_device_exists; then
     return 1
@@ -2039,10 +2047,37 @@ can_manage_tun_safely() {
     return 0
   fi
 
+  # Current shell has CAP_NET_ADMIN
   if has_cap_net_admin; then
     return 0
   fi
 
+  # Kernel binary has file capability cap_net_admin (setcap)
+  if kernel_binary_has_cap_net_admin; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Guard: refuse to run a tun action as root via sudo when the installation
+# was done in user scope. Writing runtime files as root corrupts their
+# ownership and breaks subsequent systemctl --user operations.
+guard_sudo_on_user_install() {
+  local _action="${1:-on}"
+  is_root_user || return 0
+  [ -n "${SUDO_USER:-}" ] || return 0
+
+  local _stored_scope
+  _stored_scope="$(install_env_scope 2>/dev/null || true)"
+  [ "${_stored_scope:-}" = "user" ] || return 0
+
+  echo
+  echo "❗ 操作被拒绝：user 安装模式不支持以 sudo 运行"
+  echo "🚨 原因：sudo 会将 runtime 文件写成 root:root，导致 systemctl --user 无法访问"
+  echo "👤 请以安装用户（${SUDO_USER}）直接执行："
+  echo "   clashctl tun ${_action}"
+  echo
   return 1
 }
 
