@@ -16,3 +16,7 @@ resources/dashboard/dist/
 
 # Local test scripts
 test.sh
+
+# OpenClaw control-plane local scaffolding
+ai/
+.openclaw-control-plane/
