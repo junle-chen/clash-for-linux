@@ -1956,7 +1956,12 @@ systemd_available() {
 
 systemd_user_available() {
   is_openwrt && return 1
-  command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files >/dev/null 2>&1
+  command -v systemctl >/dev/null 2>&1 || return 1
+  # Require a real user D-Bus socket; avoids false-positives in containers
+  # where systemctl exists but D-Bus is absent (XDG_RUNTIME_DIR unset or no bus socket).
+  [ -n "${XDG_RUNTIME_DIR:-}" ] || return 1
+  [ -S "${XDG_RUNTIME_DIR}/bus" ] || return 1
+  systemctl --user daemon-reload >/dev/null 2>&1
 }
 
 is_root_user() {
@@ -1972,15 +1977,43 @@ tun_device_readable() {
 }
 
 container_env_type() {
+  # Docker: marker file present
   if [ -f "/.dockerenv" ]; then
     echo "docker"
     return 0
   fi
 
+  # cgroups v1: cgroup path contains runtime keywords
   if grep -qaE '(docker|containerd|kubepods|lxc)' /proc/1/cgroup 2>/dev/null; then
     echo "container"
     return 0
   fi
+
+  # cgroups v2 + containerd/K8s: /proc/1/cgroup is just "0::/"
+  # Fall back to namespace / filesystem checks
+  if [ -f /proc/1/cgroup ] && grep -q '^0::/' /proc/1/cgroup 2>/dev/null; then
+    # Running as a non-init process tree (PID 1 is not systemd/sysvinit)
+    local _init_comm
+    _init_comm="$(cat /proc/1/comm 2>/dev/null || true)"
+    case "${_init_comm:-}" in
+      systemd|sysvinit|init|launchd|openrc-init)
+        : ;; # real host init, continue to other checks
+      *)
+        # Non-standard PID 1 is a strong container signal
+        echo "container"
+        return 0
+        ;;
+    esac
+  fi
+
+  # Overlay root filesystem is typical of container environments
+  if awk '$5 == "/" { print $1 }' /proc/mounts 2>/dev/null | grep -q 'overlay'; then
+    echo "container"
+    return 0
+  fi
+
+  # No D-Bus session and no /run/systemd/private is another container signal,
+  # but this overlaps with systemd checks elsewhere; skip here to avoid false-positives.
 
   echo "host"
 }
@@ -2548,7 +2581,7 @@ cat > "$profile_file" <<EOF
 export PATH="$(command_install_dir):\$PATH"
 
 if [ -n "\${BASH_VERSION:-}" ] && [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ]; then
-  export CLASH_FOR_LINUX_SHELL_LOADED="1"
+  CLASH_FOR_LINUX_SHELL_LOADED="1"
   source "$alias_file"
 fi
 

@@ -806,7 +806,7 @@ normalize_runtime_config() {
 
   [ -s "$file" ] || die "待规范化的配置文件不存在：$file"
 
-  resolved_ports="$(resolve_runtime_ports)"
+  resolved_ports="$(resolve_runtime_ports "$file")"
   load_resolved_runtime_ports "$resolved_ports"
 
   mixed_port="$MIXED_PORT_RESOLVED"
@@ -2038,12 +2038,23 @@ load_resolved_runtime_ports() {
 }
 
 resolve_runtime_ports() {
+  # Optional: path to a config file to read port from when MIXED_PORT is not set
+  local _hint_config_file="${1:-}"
   local preferred_mixed preferred_controller preferred_dns
   local controller_host preferred_controller_port
   local mixed_port controller_port dns_port
   local used_ports=""
 
-  preferred_mixed="${MIXED_PORT:-7890}"
+  preferred_mixed="${MIXED_PORT:-}"
+  # When MIXED_PORT is not explicitly configured, honour the port in the config file
+  if [ -z "${preferred_mixed:-}" ] && [ -n "${_hint_config_file:-}" ] && [ -s "${_hint_config_file}" ]; then
+    local _file_port
+    _file_port="$("$(yq_bin)" eval '.["mixed-port"] // .port // ""' "$_hint_config_file" 2>/dev/null | head -n 1)"
+    if [ -n "${_file_port:-}" ] && [ "$_file_port" != "null" ] && is_valid_port_number "$_file_port"; then
+      preferred_mixed="$_file_port"
+    fi
+  fi
+  preferred_mixed="${preferred_mixed:-7890}"
   preferred_controller="${EXTERNAL_CONTROLLER:-0.0.0.0:9090}"
   preferred_dns="${CLASH_DNS_PORT:-1053}"
 

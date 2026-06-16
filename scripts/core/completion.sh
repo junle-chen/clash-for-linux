@@ -410,6 +410,10 @@ completion_emit_bash_script() {
 
 completion_emit_zsh_script() {
   cat <<'EOF'
+# Ensure compinit is loaded before bashcompinit (provides compdef)
+if ! command -v compinit >/dev/null 2>&1; then
+  autoload -Uz compinit && compinit -u 2>/dev/null
+fi
 autoload -Uz bashcompinit 2>/dev/null || return 0
 bashcompinit >/dev/null 2>&1 || return 0
 EOF
