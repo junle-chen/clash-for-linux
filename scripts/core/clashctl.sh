@@ -5437,11 +5437,129 @@ tun_log_tun_adapter_line() {
   grep -E '\[TUN\].*Tun adapter|Tun adapter listening' "$log_file" 2>/dev/null | tail -n 1
 }
 
+tun_log_tun_adapter_cidrs() {
+  local adapter_line
+
+  adapter_line="$(tun_log_tun_adapter_line 2>/dev/null || true)"
+  [ -n "${adapter_line:-}" ] || return 1
+
+  printf '%s\n' "$adapter_line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' 2>/dev/null
+}
+
+tun_ipv4_to_int() {
+  local ip="$1"
+  local a b c d octet n value
+
+  IFS=. read -r a b c d <<EOF
+$ip
+EOF
+
+  [ -n "${a:-}" ] && [ -n "${b:-}" ] && [ -n "${c:-}" ] && [ -n "${d:-}" ] || return 1
+
+  value=0
+  for octet in "$a" "$b" "$c" "$d"; do
+    case "$octet" in
+      ''|*[!0-9]*)
+        return 1
+        ;;
+    esac
+
+    n=$((10#$octet))
+    [ "$n" -ge 0 ] && [ "$n" -le 255 ] || return 1
+    value=$(((value << 8) + n))
+  done
+
+  printf '%s\n' "$value"
+}
+
+tun_ipv4_in_cidr() {
+  local ip="$1"
+  local cidr="$2"
+  local base prefix ip_value base_value mask
+
+  base="${cidr%/*}"
+  prefix="${cidr#*/}"
+
+  case "$prefix" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+
+  prefix=$((10#$prefix))
+  [ "$prefix" -ge 0 ] && [ "$prefix" -le 32 ] || return 1
+
+  ip_value="$(tun_ipv4_to_int "$ip" 2>/dev/null)" || return 1
+  base_value="$(tun_ipv4_to_int "$base" 2>/dev/null)" || return 1
+
+  if [ "$prefix" -eq 0 ]; then
+    mask=0
+  else
+    mask=$(((0xffffffff << (32 - prefix)) & 0xffffffff))
+  fi
+
+  [ $((ip_value & mask)) -eq $((base_value & mask)) ]
+}
+
+tun_ipv4_in_default_tun_range() {
+  case "$1" in
+    28.*|198.18.*|198.19.*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+tun_log_source_ip_is_tun() {
+  local ip="$1"
+  local cidrs="${2:-}"
+  local cidr
+
+  tun_ipv4_in_default_tun_range "$ip" && return 0
+
+  [ -n "${cidrs:-}" ] || cidrs="$(tun_log_tun_adapter_cidrs 2>/dev/null || true)"
+  [ -n "${cidrs:-}" ] || return 1
+
+  while IFS= read -r cidr; do
+    [ -n "${cidr:-}" ] || continue
+    tun_ipv4_in_cidr "$ip" "$cidr" && return 0
+  done <<EOF
+$cidrs
+EOF
+
+  return 1
+}
+
+tun_log_line_source_ip() {
+  sed -nE 's/.*(^|[^0-9])(([0-9]{1,3}\.){3}[0-9]{1,3}):[0-9]+.*-->.*/\2/p' \
+    | tail -n 1
+}
+
 tun_log_tun_source_line() {
   local log_file="$LOG_DIR/mihomo.out.log"
-  [ -f "$log_file" ] || return 1
+  local adapter_cidrs line source_ip matched_line
 
-  grep -E '(^|[^0-9])28\.0\.0\.[0-9]+:[0-9]+.*-->' "$log_file" 2>/dev/null | tail -n 1
+  [ -f "$log_file" ] || return 1
+  adapter_cidrs="$(tun_log_tun_adapter_cidrs 2>/dev/null || true)"
+
+  while IFS= read -r line; do
+    case "$line" in
+      *'-->'*) ;;
+      *) continue ;;
+    esac
+
+    source_ip="$(printf '%s\n' "$line" | tun_log_line_source_ip 2>/dev/null || true)"
+    [ -n "${source_ip:-}" ] || continue
+
+    if tun_log_source_ip_is_tun "$source_ip" "$adapter_cidrs"; then
+      matched_line="$line"
+    fi
+  done < "$log_file"
+
+  [ -n "${matched_line:-}" ] || return 1
+  printf '%s\n' "$matched_line"
 }
 
 tun_log_has_tun_traffic_evidence() {
@@ -5504,7 +5622,7 @@ tun_doctor_log_evidence() {
   if [ -n "${traffic_line:-}" ]; then
     echo "  🐱 Tun 流量日志：$traffic_line"
   else
-    echo "  🚨 Tun 流量日志：未发现 28.0.0.x Tun 源地址流量"
+    echo "  🚨 Tun 流量日志：未发现明确 Tun 源地址流量"
   fi
 }
 
