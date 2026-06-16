@@ -296,6 +296,23 @@ CLASH_BUNDLED_ASSET_ENABLED=true
 
 按需设置即可，不需要每项都写。
 
+#### GitHub 下载加速
+
+所有来自 GitHub 的资源（内核、GEO 数据、yq、subconverter、Dashboard）在下载时会自动尝试内置镜像池（`gh-proxy.org`、`ghfast.top`、`ghproxy.net`、`kkgithub.com`），无需额外配置即可加速。
+
+如果默认镜像不满足需求，可在 `.env` 中指定自定义加速前缀：
+
+```bash
+# 单个自定义镜像（优先于内置镜像池）
+CLASH_GH_PROXY=https://ghfast.top
+
+# 自定义镜像池（完全替换内置池，格式：label|prefix|mode，mode 可选 full/hostpath）
+# CLASH_GH_PROXY_POOL="mymirror|https://mirror.example.com|full"
+```
+
+可用镜像列表参考：<https://ghproxy.link/>  
+当前镜像使用状态可通过 `clashctl doctor` 查看。
+
 ### 内置运行依赖
 
 当前正式支持的架构为 `amd64`、`arm64`、`armv7`。超出这三种架构时会明确失败，不会伪装成已支持。

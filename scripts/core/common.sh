@@ -555,6 +555,7 @@ default_github_mirror_pool() {
 gh-proxy|https://gh-proxy.org|full
 ghfast|https://ghfast.top|hostpath
 ghproxy-net|https://ghproxy.net|hostpath
+kkgithub|https://kkgithub.com|hostpath
 EOF
 }
 
