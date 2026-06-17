@@ -292,9 +292,12 @@ SUBCONVERTER_VERSION=v0.9.9
 MIHOMO_DOWNLOAD_BASE=https://github.com/MetaCubeX/mihomo/releases/download
 CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
+CLASH_SHELL_AUTO_RESTORE_PROXY=true
 ```
 
 按需设置即可，不需要每项都写。
+
+- `CLASH_SHELL_AUTO_RESTORE_PROXY`：控制登录 Shell 是否自动恢复上次 `clashon` 写入的代理变量。默认 `true` 保持兼容；如果不希望 SSH 远程登录后自动带上 `http_proxy` / `https_proxy`，设为 `false`，之后仍可手动执行 `clashon`。
 
 #### GitHub 下载加速
 

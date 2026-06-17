@@ -54,6 +54,35 @@ _clash_alias_yq_bin() {
   echo "$(_clash_alias_project_dir)/runtime/bin/yq"
 }
 
+_clash_alias_env_value() {
+  local key="$1"
+  local env_file
+
+  if [ -n "${!key:-}" ]; then
+    printf '%s' "${!key}"
+    return 0
+  fi
+
+  env_file="$(_clash_alias_project_dir)/.env"
+  [ -f "$env_file" ] || return 0
+
+  sed -nE "s/^[[:space:]]*(export[[:space:]]+)?${key}=['\"]?([^'\"]*)['\"]?$/\2/p" "$env_file" | tail -n 1
+}
+
+_clash_alias_shell_auto_restore_enabled() {
+  local value
+
+  value="$(_clash_alias_env_value CLASH_SHELL_AUTO_RESTORE_PROXY)"
+  case "${value:-true}" in
+    false|False|FALSE|0|no|No|NO|off|Off|OFF)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
 _clash_alias_set_persist_enabled() {
   local enabled="$1"
   local state_file
@@ -255,6 +284,7 @@ _clash_alias_run_off() {
 }
 
 _clash_alias_auto_restore_proxy() {
+  _clash_alias_shell_auto_restore_enabled || return 0
   _clash_alias_persist_enabled || return 0
   _clash_alias_export_proxy || return 0
 
