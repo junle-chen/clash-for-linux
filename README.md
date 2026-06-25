@@ -293,13 +293,13 @@ MIHOMO_DOWNLOAD_BASE=https://github.com/MetaCubeX/mihomo/releases/download
 CLASH_DOWNLOAD_BASE=https://github.com/WindSpiritSR/clash/releases/download
 CLASH_BUNDLED_ASSET_ENABLED=true
 CLASH_SHELL_AUTO_RESTORE_PROXY=true
-CLASH_PREDOWNLOAD_GEO=false
+CLASH_PREDOWNLOAD_GEO=true
 ```
 
 按需设置即可，不需要每项都写。
 
 - `CLASH_SHELL_AUTO_RESTORE_PROXY`：控制登录 Shell 是否自动恢复上次 `clashon` 写入的代理变量。默认 `true` 保持兼容；如果不希望 SSH 远程登录后自动带上 `http_proxy` / `https_proxy`，设为 `false`，之后仍可手动执行 `clashon`。
-- `CLASH_PREDOWNLOAD_GEO`：控制安装期是否预下载 GEO 数据。默认 `false`，临时部署时不会下载 `Country.mmdb`、`geoip.metadb`、`GeoIP.dat`、`GeoSite.dat` 等大文件；如果希望离线预置这些资源，可设为 `true`。注意：当最终运行配置实际使用 `GEOIP` 规则时，启动前仍会按需准备 `Country.mmdb`，否则 Mihomo 无法可靠加载该配置。
+- `CLASH_PREDOWNLOAD_GEO`：控制安装期是否预下载 GEO 数据。默认 `true`，会提前下载 `Country.mmdb`、`geoip.metadb`、`GeoIP.dat`、`GeoSite.dat` 等规则分流常用资源；临时部署、只想先跑起来时可设为 `false` 跳过安装期预下载。注意：当最终运行配置实际使用 `GEOIP` 规则时，启动前仍会按需准备 `Country.mmdb`，否则 Mihomo 无法可靠加载该配置。
 
 #### GitHub 下载加速
 

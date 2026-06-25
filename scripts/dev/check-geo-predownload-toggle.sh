@@ -51,7 +51,7 @@ assert_download_count() {
 
 unset CLASH_PREDOWNLOAD_GEO
 resolve_geo_assets
-assert_download_count "default skips install-time GEO predownload" 0
+assert_download_count "default predownloads GEO assets" 5
 
 : > "$download_log"
 CLASH_PREDOWNLOAD_GEO=false resolve_geo_assets
