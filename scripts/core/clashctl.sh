@@ -296,25 +296,62 @@ cmd_on() {
 }
 
 cmd_off() {
-  local system_proxy_rc
+  local system_proxy_rc stop_rc
+  local system_proxy_state_before system_proxy_cleanup_blocked="false"
 
   prepare
+
+  system_proxy_state_before="$(system_proxy_status 2>/dev/null || echo off)"
 
   if system_proxy_disable; then
     :
   else
     system_proxy_rc=$?
     write_runtime_value "RUNTIME_BOOT_PROXY_KEEP" "false" 2>/dev/null || true
-    if [ "$system_proxy_rc" -eq 2 ]; then
-      ui_warn "当前环境不支持清理系统代理持久块，已继续关闭运行时"
-    else
-      ui_warn "系统代理持久块清理失败，已继续关闭运行时"
-      ui_next "clashctl doctor"
+
+    if [ "$system_proxy_state_before" = "on" ]; then
+      system_proxy_cleanup_blocked="true"
+      if [ "$system_proxy_rc" -eq 2 ]; then
+        ui_warn "当前环境不支持清理系统代理持久块，已继续关闭运行时"
+      else
+        ui_warn "系统代理持久块清理失败，已继续关闭运行时"
+        ui_next "clashctl doctor"
+      fi
     fi
   fi
+
+  if status_is_running 2>/dev/null; then
+    stop_rc=0
+    service_stop || stop_rc=$?
+    if [ "$stop_rc" -ne 0 ]; then
+      die_state "关闭运行时失败：运行后端 stop 返回 ${stop_rc}" "clashctl logs"
+    fi
+
+    if ! wait_runtime_stopped 8; then
+      die_state "关闭运行时失败：代理内核仍在运行" "clashctl logs"
+    fi
+  fi
+
+  if [ "$system_proxy_cleanup_blocked" = "true" ]; then
+    die_state "系统代理持久块未清理：$(system_proxy_env_file)" "请使用有权限的用户执行 clashctl off，或手动清理该文件中的 clash-for-linux 代理块"
+  fi
+
   ui_blank
-  echo "🧹 系统代理已关闭"
+  echo "🧹 代理已关闭"
   ui_blank
+}
+
+wait_runtime_stopped() {
+  local timeout="${1:-8}"
+  local elapsed=0
+
+  while status_is_running 2>/dev/null; do
+    [ "$elapsed" -lt "$timeout" ] || return 1
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 0
 }
 
 ui_internal_url() {
