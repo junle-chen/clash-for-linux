@@ -14,7 +14,7 @@ GEO_ASSET_DOWNLOADS=(
 )
 
 resolve_geo_assets() {
-  case "${CLASH_PREDOWNLOAD_GEO:-true}" in
+  case "${CLASH_PREDOWNLOAD_GEO:-false}" in
     0|false|no|off|disable|disabled|FALSE|NO|OFF) return 0 ;;
   esac
 
