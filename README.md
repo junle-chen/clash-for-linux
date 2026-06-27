@@ -494,6 +494,30 @@ Tun 判断不会简单把 `root` 等同于拥有 `CAP_NET_ADMIN`，也不会把 
 bash uninstall.sh
 ```
 
+默认执行完整卸载：停止 mihomo/subconverter，关闭系统代理持久接管，删除 systemd/脚本入口、`clashctl`、命令补全、shell alias、shell proxy 持久状态、controller secret 和运行目录。完整卸载完成后，脚本会提示其他卸载方式。
+
+`--purge-runtime` 保留为兼容别名；默认卸载已经会清理运行目录。
+
+如需只移除入口并保留 `runtime/` 数据：
+
+```bash
+bash uninstall.sh --keep-runtime
+```
+
+开发调试时只清安装状态、保留订阅与下载缓存：
+
+```bash
+bash uninstall.sh --dev-reset
+```
+
+如需完整卸载后连项目目录也移走：
+
+```bash
+bash uninstall.sh --remove-project
+```
+
+该命令会要求输入完整项目路径确认，并把项目目录移动到 `~/.local/share/clash-for-linux-backups/` 下，便于误操作恢复。非交互脚本可显式传入 `--yes`。
+
 ## 设置代理
 1. 开启 IP 转发
 
